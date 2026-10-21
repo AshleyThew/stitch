@@ -8,6 +8,11 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
+    inputs:
+      lenient:
+        description: Report every dependency that fails verification, and build on (a dry run's check)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -52,9 +57,10 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          VERIFICATION: ${{ inputs.lenient && 'lenient' || 'strict' }}
         run: |
           gradle() {
-            ./gradlew --no-daemon --quiet -Pstitch.version="$VERSION" \
+            ./gradlew --no-daemon --quiet --dependency-verification "$VERIFICATION" -Pstitch.version="$VERSION" \
               -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64 \
               -Porg.gradle.java.installations.auto-download=false "$@"
           }
