@@ -1,0 +1,109 @@
+name: Release
+
+# A version tag (v0.1.0) builds every mod jar and the compiler, publishes them as a GitHub release with
+# their checksums, and moves the action's major tag (v0) to it, so `uses: AshleyThew/stitch@v0` picks it
+# up. Run by hand, it only builds: a dry run.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # 17 for the core and Forge before 1.20.6, 21 for Gradle itself, 25 for Minecraft 26.x's classes
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            25
+            21
+
+      - name: The version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dryrun" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The 26.x mods compile against Minecraft's own jar, which 26.x ships unobfuscated: from Mojang,
+      # checked against the SHA-1 Mojang's version list gives for it.
+      - name: Minecraft's client jars
+        run: |
+          mkdir -p minecraft
+          manifest=$(curl -fsSL https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
+          for version in 26.1.2 26.3; do
+            url=$(echo "$manifest" | jq -r --arg v "$version" '.versions[] | select(.id == $v) | .url')
+            client=$(curl -fsSL "$url" | jq -r '.downloads.client | "\(.url) \(.sha1)"')
+            curl -fsSL -o "minecraft/$version.jar" "${client% *}"
+            echo "${client#* }  minecraft/$version.jar" | sha1sum -c -
+          done
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gradle() {
+            ./gradlew --no-daemon --quiet -Pstitch.version="$VERSION" \
+              -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64 \
+              -Porg.gradle.java.installations.auto-download=false "$@"
+          }
+          mkdir -p out
+          gradle :core:test :compiler:jar
+          cp compiler/build/libs/stitch-compiler.jar out/
+          for group in 1.18 1.19; do
+            gradle :fabric:legacy:remapJar -Pstitch.fabric=$group
+            cp fabric/legacy/build/libs/stitch-fabric-$group.jar out/
+            gradle :forge:legacy:reobfJar -Pstitch.forge=$group
+            cp forge/legacy/build/libs/stitch-forge-$group.jar out/
+          done
+          gradle :fabric:modern:jar -Pstitch.fabric=26.1 -Pstitch.minecraftJar="$PWD/minecraft/26.1.2.jar"
+          cp fabric/modern/build/libs/stitch-fabric-26.1.jar out/
+          gradle :fabric:modern:jar -Pstitch.fabric=26.3 -Pstitch.minecraftJar="$PWD/minecraft/26.3.jar"
+          cp fabric/modern/build/libs/stitch-fabric-26.3.jar out/
+          gradle :forge:modern:jar -Pstitch.minecraftJar="$PWD/minecraft/26.1.2.jar"
+          cp forge/modern/build/libs/stitch-forge-1.20.6.jar out/
+          cd out && sha256sum *.jar > SHA256SUMS && cat SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stitch-${{ steps.version.outputs.version }}
+          path: out/
+
+      - name: Publish the release and move the major tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<EOF
+          One jar a game, by loader and Minecraft version:
+
+          | Loader | Minecraft | Jar |
+          |---|---|---|
+          | Fabric with Iris | 1.18.2 | \`stitch-fabric-1.18.jar\` |
+          | | 1.19 to 1.21.11 | \`stitch-fabric-1.19.jar\` |
+          | | 26.1 and 26.2 | \`stitch-fabric-26.1.jar\` |
+          | | 26.3 on | \`stitch-fabric-26.3.jar\` |
+          | Forge with OptiFine | 1.18.2 | \`stitch-forge-1.18.jar\` |
+          | | 1.19 to 1.20.4 | \`stitch-forge-1.19.jar\` |
+          | | 1.20.6 to 1.21.11 | \`stitch-forge-1.20.6.jar\` |
+
+          Packs build their stitches in with the action: \`uses: AshleyThew/stitch@${TAG%%.*}\`.
+
+          Built by this workflow from ${GITHUB_SHA}; SHA256SUMS lists every file's checksum.
+          EOF
+          gh release create "$TAG" out/* --title "Stitch ${TAG#v}" --notes-file notes.md
+          major="${TAG%%.*}"
+          git tag -f "$major"
+          git push -f origin "$major"

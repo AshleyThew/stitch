@@ -109,7 +109,7 @@ written for (usually a marker texel in its texture) and leaves everything else a
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: AshleyThew/stitch@v1
+- uses: AshleyThew/stitch@v0
   with:
     pack: .
 ```
@@ -145,7 +145,7 @@ accepted from 1.20.1 on:
 
 </details>
 
-**3. Point shader pack players at the mod.** One jar, matching their game:
+**3. Point shader pack players at the mod.** One jar from the [latest release](https://github.com/AshleyThew/stitch/releases/latest), matching their game:
 
 | Loader | Minecraft | Jar |
 |---|---|---|
