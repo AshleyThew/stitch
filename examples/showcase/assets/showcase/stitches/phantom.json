@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "targets": [
+    "armor"
+  ],
+  "vertex": "showcase:stitches/phantom.vert.glsl",
+  "fragment": "showcase:stitches/phantom.frag.glsl",
+  "varyings": [
+    {
+      "name": "on",
+      "type": "int",
+      "flat": true
+    }
+  ],
+  "uniforms": [
+    "game_time"
+  ],
+  "requires": [
+    "texture_size",
+    "orientation"
+  ]
+}

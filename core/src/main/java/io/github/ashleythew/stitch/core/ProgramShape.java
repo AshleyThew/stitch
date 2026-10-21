@@ -20,8 +20,8 @@ public final class ProgramShape {
     String up = null;
     String handedness = null;
     String inScreen = "false";
-    String gameTime = null;
-    String screenSize = null;
+    /** Each uniform the reader can give, by its name in the spec (game_time, screen_size). */
+    final Map<String, Uniform> uniforms = new LinkedHashMap<>();
     boolean shadow = false;
     boolean layouts = false;
     String vertexHeader = null;
@@ -63,11 +63,17 @@ public final class ProgramShape {
         return this;
     }
 
-    /** GLSL expressions for the game time (0-1 over a day) and the framebuffer size, where it has them. */
-    public ProgramShape uniforms(String gameTime, String screenSize) {
-        this.gameTime = gameTime;
-        this.screenSize = screenSize;
+    /**
+     * A uniform from the spec's list (game_time, screen_size): the GLSL expression for it, and what declares
+     * what that expression reads (a uniform line, or an import), added to each stage that doesn't already
+     * declare the named uniform or carry the declaration.
+     */
+    public ProgramShape uniform(String name, String expression, String reads, String declaration) {
+        uniforms.put(name, new Uniform(expression, reads, declaration));
         return this;
+    }
+
+    record Uniform(String expression, String reads, String declaration) {
     }
 
     /** Position is in model space (from 1.20.5; view space before). */

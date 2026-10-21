@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "targets": [
+    "armor"
+  ],
+  "vertex": "showcase:stitches/astral.vert.glsl",
+  "fragment": "showcase:stitches/astral.frag.glsl",
+  "varyings": [
+    {
+      "name": "on",
+      "type": "int",
+      "flat": true
+    },
+    {
+      "name": "sky",
+      "type": "vec3"
+    },
+    {
+      "name": "rim",
+      "type": "float"
+    }
+  ],
+  "uniforms": [
+    "game_time"
+  ],
+  "requires": [
+    "texture_size",
+    "orientation"
+  ]
+}

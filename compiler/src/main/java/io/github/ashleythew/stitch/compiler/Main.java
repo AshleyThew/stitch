@@ -112,6 +112,14 @@ public final class Main {
                 if (g.files.get("json") != null) {
                     files.put(g.name + ".json", programJson(g.files.get("json"), g.first));
                 }
+                // a program of an older shader name that this release still has, its JSON pointing at the
+                // shader woven here (1.21.2 to 1.21.4): its own copy, so the base folder's older one
+                // never reaches it, with the uniforms the weaving reads
+                for (Map.Entry<String, String> e : g.files.entrySet()) {
+                    if (e.getKey().startsWith("program:") && e.getValue() != null) {
+                        files.put(e.getKey().substring("program:".length()), programJson(e.getValue(), g.first));
+                    }
+                }
                 boolean isBase = i == 0 && base;
                 String directory = isBase ? null : PREFIX + target + "_" + g.firstRelease.replace('.', '_');
                 Path core = (isBase ? output : output.resolve(directory)).resolve("assets/minecraft/shaders/core");
@@ -165,9 +173,15 @@ public final class Main {
             files.put("vsh", minecraft.shader(r, name + ".vsh"));
             files.put("fsh", minecraft.shader(r, name + ".fsh"));
             files.put("json", minecraft.shader(r, name + ".json"));
+            for (String other : CoreTargets.SHADERS.get(target)) {
+                if (!other.equals(name) && shaders.names().contains(other + ".json")) {
+                    files.put("program:" + other + ".json", minecraft.shader(r, other + ".json"));
+                }
+            }
             int format = shaders.format();
             // the same text woven the same way: the shape changes at these formats
-            String key = name + files + (format >= CoreTargets.MODEL_SPACE_FROM) + (format >= CoreTargets.DRAW_PARAMETERS_FROM);
+            String key = name + files + (format >= CoreTargets.MODEL_SPACE_FROM) + (format >= CoreTargets.DRAW_PARAMETERS_FROM)
+                + (format >= CoreTargets.GLOBALS_FROM);
             Group last = groups.isEmpty() ? null : groups.get(groups.size() - 1);
             if (last != null && last.key.equals(key)) {
                 last.last = Math.max(last.last, format);
@@ -189,14 +203,19 @@ public final class Main {
     @SuppressWarnings("unchecked")
     private static String programJson(String json, int format) {
         Map<String, Object> program = (Map<String, Object>) Json.parse(json);
+        List<Object> uniforms = (List<Object>) program.computeIfAbsent("uniforms", k -> new ArrayList<>());
         if (format < CoreTargets.MODEL_SPACE_FROM) {
-            List<Object> uniforms = (List<Object>) program.computeIfAbsent("uniforms", k -> new ArrayList<>());
-            boolean has = uniforms.stream().anyMatch(u -> CoreTargets.VIEW_ROTATION.equals(((Map<String, Object>) u).get("name")));
-            if (!has) {
-                uniforms.add(new LinkedHashMap<>(CoreTargets.VIEW_ROTATION_UNIFORM));
-            }
+            addUniform(uniforms, CoreTargets.VIEW_ROTATION_UNIFORM);
         }
+        addUniform(uniforms, CoreTargets.GAME_TIME_UNIFORM);
         return Json.write(program, "    ") + "\n";
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addUniform(List<Object> uniforms, Map<String, Object> uniform) {
+        if (uniforms.stream().noneMatch(u -> uniform.get("name").equals(((Map<String, Object>) u).get("name")))) {
+            uniforms.add(new LinkedHashMap<>(uniform));
+        }
     }
 
     /** pack.mcmeta with the stitch overlay entries replaced by these, the pack's own entries kept. */

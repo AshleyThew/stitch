@@ -1,0 +1,9 @@
+{
+  "pack": {
+    "description": "Stitch showcase: five armour sets, live in vanilla and under shader packs",
+    "pack_format": 15,
+    "supported_formats": {"min_inclusive": 15, "max_inclusive": 255},
+    "min_format": 15,
+    "max_format": 255
+  }
+}

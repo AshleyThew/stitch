@@ -1,61 +1,111 @@
+<div align="center">
+
+<img src="docs/images/stitch.svg" width="88" alt="Stitch logo">
+
 # Stitch
 
-Resource pack shaders that keep working under shader packs.
+**Resource pack shaders that keep working under shader packs.**
 
-## What it does
+Write a shader effect once. It runs in vanilla, and it keeps running when the player turns on Iris or OptiFine.
 
-A resource pack can change how Minecraft draws things by shipping its own copies of the game's core
-shaders: armour shaped by its texture, items that hide parts of themselves, text effects. Those copies
-work in vanilla and with Sodium, but a shader pack (Iris or OptiFine) draws the world with its own
-programs, and the pack's changes vanish.
+![Minecraft 1.18.2 to 26.3](https://img.shields.io/badge/Minecraft-1.18.2%20%E2%86%92%2026.3-62b47a)
+![Fabric + Iris](https://img.shields.io/badge/Fabric-Iris-7c3aed)
+![Forge + OptiFine](https://img.shields.io/badge/Forge-OptiFine-c0392b)
+![GitHub Action](https://img.shields.io/badge/GitHub-Action-2088ff)
+![Licence: PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial-5c6b7a)
 
-With Stitch, a pack writes each change once, as a **stitch**: a small GLSL function against a fixed
-interface ("change this vertex", "change this texel"), and a JSON file saying what it applies to.
+[Showcase](#the-showcase-pack) · [Quick start](#quick-start) · [Features](#features) · [Where it works](#where-it-works) · [Specification](docs/SPEC.md)
 
-- **Without a shader pack**, nothing is needed on the player's side. When the pack is built, Stitch
-  weaves its stitches into Minecraft's own core shaders, for every release from 1.18.2, as ordinary pack
-  overlays.
-- **With a shader pack**, the player adds the Stitch mod. It weaves the same stitches into the shader
-  pack's programs as they load, so the pack's changes and the shader pack's lighting and shadows both
-  apply.
+</div>
 
-Players without the mod see exactly what they would without Stitch.
+<br>
 
-## Adding Stitch to a pack
+<img src="docs/images/hero.png" alt="Five armour sets under the Complementary shader pack at sunset: a starfield suit, lava-cracked basalt, glitching iron, gold plate with great feathered wings, and dissolving spectral mail">
 
-### 1. Write the stitches
+<p align="center"><sub>Five armour sets from the <a href="examples/showcase/">showcase pack</a>, under the Complementary shader pack. Every effect is a resource pack stitch.</sub></p>
 
-A stitch is a JSON file and one or two GLSL files under `assets/<namespace>/stitches/`:
+## Why
 
-```
-assets/example/stitches/flared_leggings.json
-assets/example/stitches/flared_leggings.vert.glsl
-```
+A resource pack can reshape how Minecraft draws things by shipping its own core shaders. Turn on a shader
+pack and those shaders are thrown away: the shader pack draws the world with its own programs, and the
+pack's effects vanish.
+
+<img src="docs/images/compare.png" alt="The same scene three ways: vanilla with the effects; a shader pack without Stitch, the armour plain; a shader pack with Stitch, the effects back">
+
+Stitch fixes that. A pack describes each effect as a **stitch**, a small GLSL function against a fixed
+interface. Stitch weaves the same stitch into Minecraft's core shaders for every release when the pack
+is built, and into the shader pack's programs when the game loads them.
+
+## The showcase pack
+
+Five armour sets in [`examples/showcase`](examples/showcase/), one stitch each, drawn over five vanilla
+materials. They need nothing but the pack in vanilla, and the Stitch mod under a shader pack.
+
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/astral.gif" alt="Astral armour">
+      <p><b>Astral</b> · diamond<br><sub>Each panel is a window onto a starfield fixed in the world. The pieces float free of the body.</sub></p>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/magma.gif" alt="Magma armour">
+      <p><b>Magma</b> · netherite<br><sub>Lava flows down the cracks in basalt plate, embers glow beside it, and the suit shimmers with heat.</sub></p>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/glitch.gif" alt="Glitch armour">
+      <p><b>Glitch</b> · iron<br><sub>Slices tear sideways, colours split, scanlines crawl and the circuits pulse.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/seraph.gif" alt="Seraph armour">
+      <p><b>Seraph</b> · gold<br><sub>Great feathered wings that beat. A chestplate has no wings; the stitch folds two of its own faces out into them.</sub></p>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/phantom.gif" alt="Phantom armour">
+      <p><b>Phantom</b> · chainmail<br><sub>Spectral mail that drifts, and burns away at glowing edges as it fades in and out. Its runes pulse.</sub></p>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/showcase/player.gif" alt="A player wearing Seraph armour">
+      <p><b>On a player</b><br><sub>Wings, shadows and all: the stitches follow the body's pose like any armour.</sub></p>
+    </td>
+  </tr>
+</table>
+
+The wings are the showpiece: no extra models and no mod for vanilla players. The vertex stitch takes the
+chestplate's two side faces, moves each one's back edge behind the shoulder blades, and swings its front
+edge out to a wing tip. The fragment stitch then draws the feathers.
+
+## Quick start
+
+**1. Write a stitch** under `assets/<namespace>/stitches/`: a JSON file and one or two GLSL functions.
 
 ```json
 {
   "format": 1,
   "targets": ["armor"],
-  "vertex": "example:stitches/flared_leggings.vert.glsl",
+  "vertex": "example:stitches/glow.vert.glsl",
+  "fragment": "example:stitches/glow.frag.glsl",
+  "uniforms": ["game_time"],
   "requires": ["texture_size"]
 }
 ```
 
 ```glsl
 void stitch_vertex(inout StitchVertex v) {
-    // move, recolour or hide the vertex; the fragment side is stitch_texel(f, texel)
+    // move, recolour or hide the vertex
+}
+
+vec4 stitch_texel(StitchFragment f, vec4 texel) {
+    // change the colour drawn
+    return texel;
 }
 ```
 
-A target such as `armor` covers everything of its kind, so a stitch must check that it is looking at
-something it was written for (usually a marker texel in the texture) and leave everything else alone.
+A target like `armor` covers everything of its kind, so a stitch checks it is looking at what it was
+written for (usually a marker texel in its texture) and leaves everything else alone.
 
-The [specification](docs/SPEC.md) has every field, target and function. The
-[flared leggings example](examples/flared-leggings/) is a complete pack to start from.
-
-### 2. Build them into the pack
-
-In the pack's GitHub workflow, run Stitch's action after checking the pack out:
+**2. Build it into the pack** with Stitch's GitHub Action:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -64,9 +114,11 @@ In the pack's GitHub workflow, run Stitch's action after checking the pack out:
     pack: .
 ```
 
-It fetches each Minecraft release's shaders from Mojang, weaves the pack's stitches into them, and
-writes the results into the pack as overlays, with their entries in `pack.mcmeta`. A stitch that can't
-be woven fails the build.
+It fetches each Minecraft release's shaders from Mojang, weaves the stitches in, and writes them into the
+pack as overlays, with their `pack.mcmeta` entries. A stitch that can't be woven fails the build.
+
+<details>
+<summary><b>Action inputs, and a <code>pack.mcmeta</code> that loads everywhere</b></summary>
 
 | Input | Default | Meaning |
 |---|---|---|
@@ -76,8 +128,8 @@ be woven fails the build.
 | `base` | `true` | Also write the oldest range into the pack's base folder, for releases before overlays (to 1.20.1) |
 | `strict` | `true` | Fail on warnings too, such as a stitch left out of a release that can't give what it needs |
 
-Releases up to 1.20.1 only load a pack whose `pack_format` is exactly theirs; the base folder is for
-them. A `pack.mcmeta` that every release from 1.20.1 accepts:
+Releases up to 1.20.1 load a pack only when its `pack_format` is exactly theirs. This `pack.mcmeta` is
+accepted from 1.20.1 on:
 
 ```json
 {
@@ -91,9 +143,9 @@ them. A `pack.mcmeta` that every release from 1.20.1 accepts:
 }
 ```
 
-### 3. Tell shader pack players about the mod
+</details>
 
-Players who use a shader pack install the Stitch mod for their game, one jar:
+**3. Point shader pack players at the mod.** One jar, matching their game:
 
 | Loader | Minecraft | Jar |
 |---|---|---|
@@ -105,7 +157,19 @@ Players who use a shader pack install the Stitch mod for their game, one jar:
 | | 1.19 to 1.20.4 | `stitch-forge-1.19.jar` |
 | | 1.20.6 to 1.21.11 | `stitch-forge-1.20.6.jar` |
 
-It needs nothing from the server and changes nothing without a shader pack.
+The mod needs nothing from the server, and does nothing without a shader pack.
+
+## Features
+
+| | |
+|---|---|
+| ✍️ **One definition** | A stitch is written once, against an interface that doesn't change with Minecraft's shaders or a shader pack's |
+| 🧱 **Every release** | Compiled into vanilla core shader overlays for every release from 1.18.2 to 26.3, version differences handled for you |
+| 🌄 **Under shader packs** | Woven into Iris's and OptiFine's programs as they load, shadow pass included, so shapes cast matching shadows |
+| 🔺 **Shapes, not only colours** | Move or hide vertices: flared skirts, floating plates, wings made from a chestplate's own faces |
+| ⏱️ **Animation** | `game_time` in both functions, from Minecraft's clock or the shader pack's |
+| 🧩 **Packs side by side** | Each stitch's names are kept private, so stitches from different packs never collide |
+| 🛡️ **Fails safe** | A stitch a program can't take is left out of that program alone, with a log line saying why; the shader pack still loads |
 
 ## Where it works
 
@@ -113,8 +177,34 @@ It needs nothing from the server and changes nothing without a shader pack.
 |---|---|
 | Vanilla, Sodium, or Iris and OptiFine with shaders off | yes, from the pack alone |
 | Fabric with Iris and a shader pack | yes, with the mod |
-| Forge with OptiFine and a shader pack | yes, with the mod, wherever OptiFine runs on Forge |
+| Forge with OptiFine and a shader pack | yes, with the mod, wherever OptiFine runs on Forge (1.18.2 to 1.21.11) |
 | OptiFine without a mod loader | no: it can't load mods |
+
+## Documentation
+
+- [Specification](docs/SPEC.md): every field, target, function and capability of a stitch.
+- [Showcase pack](examples/showcase/): the five armour sets above.
+- [Flared leggings](examples/flared-leggings/): the smallest complete example, one vertex function.
+
+<details>
+<summary><b>Building from source</b></summary>
+
+```
+./gradlew :core:test
+./gradlew :compiler:jar                                     the compiler the action runs
+./gradlew :fabric:legacy:remapJar -Pstitch.fabric=1.18      Fabric 1.18.2
+./gradlew :fabric:legacy:remapJar -Pstitch.fabric=1.19      Fabric 1.19 to 1.21.11
+./gradlew :fabric:modern:jar -Pstitch.fabric=26.1 -Pstitch.minecraftJar=<26.1 client jar>
+./gradlew :fabric:modern:jar -Pstitch.fabric=26.3 -Pstitch.minecraftJar=<26.3 client jar>
+./gradlew :forge:legacy:reobfJar -Pstitch.forge=1.18        Forge 1.18.2
+./gradlew :forge:legacy:reobfJar -Pstitch.forge=1.19        Forge 1.19 to 1.20.4
+./gradlew :forge:modern:jar -Pstitch.minecraftJar=<26.1 client jar>
+```
+
+Dependencies are pinned by checksum in `gradle/verification-metadata.xml`; a download that doesn't match
+fails the build.
+
+</details>
 
 ## Licence
 

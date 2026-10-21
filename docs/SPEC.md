@@ -117,8 +117,12 @@ reconstruction) gets the function on each sample.
 | `stitch_in_screen()` | none | True in a screen (GUI), false in the world. Vertex only |
 | `stitch_up()` | `orientation` | Up, in `position`'s space: the world's up, or the screen's in a screen's entity preview (the player in the inventory). Vertex only |
 | `stitch_handedness()` | `orientation` | 1, or -1 where that space is mirrored, so `cross(stitch_up(), normal) * stitch_handedness()` always runs to the model's left on its front. Vertex only |
-| `stitch_game_time` | uniform `game_time` | 0-1 over a Minecraft day, as Minecraft's `GameTime` |
+| `stitch_game_time` | uniform `game_time` | 0-1 over twenty minutes, Minecraft's day (`* 1200.0` gives seconds); in both functions. Under a shader pack it runs on the shader pack's clock |
 | `stitch_screen_size` | uniform `screen_size` | Framebuffer size in pixels |
+
+A uniform a reader has no source for still compiles: `stitch_game_time` reads 0 (the stitch applies,
+standing still) and `stitch_screen_size` reads 1×1. Minecraft 1.21.5 is such a release for
+`game_time`: it binds no clock to the armour shader.
 | varyings | listed in `varyings` | Read and write by name, in both functions |
 
 Names a stitch declares itself (functions, constants) are kept private to it: the reader prefixes them

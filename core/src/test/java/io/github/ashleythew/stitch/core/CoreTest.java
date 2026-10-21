@@ -143,6 +143,30 @@ class CoreTest {
     }
 
     @Test
+    void gameTimeInBothStagesOrStandingStill() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
+                + " \"uniforms\": [\"game_time\"]}",
+            Map.of("test:v", "void stitch_vertex(inout StitchVertex v) { v.position.y += stitch_game_time; }",
+                "test:f", "vec4 stitch_texel(StitchFragment f, vec4 texel) { return texel * stitch_game_time; }"));
+        ProgramShape shape = new ProgramShape().input("position", "Position").albedo("Sampler0", Set.of("texture"))
+            .uniform("game_time", "GameTime", "GameTime", "uniform float GameTime;");
+        Weaver.Woven w = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s));
+        for (String stage : List.of(w.vertex(), w.fragment())) {
+            assertTrue(stage.contains("uniform float GameTime;"));
+            assertTrue(stage.contains("#define stitch_game_time (GameTime)"));
+        }
+        // declared once, where the program already has it
+        Weaver.Woven again = Weaver.weave(VERTEX.replace("uniform mat4 ProjMat;", "uniform mat4 ProjMat;\nuniform float GameTime;"),
+            FRAGMENT, shape, List.of(s));
+        assertEquals(1, again.vertex().split("uniform float GameTime;", -1).length - 1);
+        // a reader without a clock still applies the stitch, standing still
+        Weaver.Woven still = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position")
+            .albedo("Sampler0", Set.of("texture")), List.of(s));
+        assertEquals(List.of("test:s"), still.applied());
+        assertTrue(still.fragment().contains("#define stitch_game_time (0.0)"));
+    }
+
+    @Test
     void preprocessorKeepsOneStage() {
         String glsl = """
             #version 150 compatibility

@@ -77,11 +77,18 @@ public final class Weaver {
         if (shape.capabilities.contains("texture_size") && !Glsl.declaresUniform(vt, shape.sampler)) {
             vertexCode.append("uniform sampler2D ").append(shape.sampler).append(";\n");
         }
+        Set<String> uniforms = new java.util.TreeSet<>();
+        use.forEach(s -> uniforms.addAll(s.uniforms()));
+        // what the uniforms read is declared at the top (a renderer may only take its includes there)
+        vertexTop.append(declarations(shape, uniforms, vt, vertex));
+        vertexCode.append(macros(shape, uniforms));
         vertexCode.append(helpers(shape, true));
+        String fragmentTop = declarations(shape, uniforms, ft, fragment);
         StringBuilder fragmentCode = new StringBuilder(STRUCTS);
         if (shape.capabilities.contains("texture_size") && !Glsl.declaresUniform(ft, shape.sampler)) {
             fragmentCode.append("uniform sampler2D ").append(shape.sampler).append(";\n");
         }
+        fragmentCode.append(macros(shape, uniforms));
         fragmentCode.append(helpers(shape, false));
         StringBuilder run = new StringBuilder("void stitch_run() {\n    StitchVertex v = StitchVertex(");
         for (int i = 0; i < FIELDS.length; i++) {
@@ -132,7 +139,7 @@ public final class Weaver {
         fragmentCode.append(texel);
 
         String wovenVertex = vertex == null ? null : weaveVertex(vt, shape, vertexTop.toString(), varyingsOut + vertexCode.toString());
-        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, varyingsIn + fragmentCode.toString());
+        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop, varyingsIn + fragmentCode.toString());
         return new Woven(wovenVertex, wovenFragment, applied, skipped);
     }
 
@@ -169,11 +176,42 @@ public final class Weaver {
             out.append("vec3 stitch_up() { return ").append(shape.up).append("; }\n");
             out.append("float stitch_handedness() { return ").append(shape.handedness).append("; }\n");
         }
-        if (vertex && shape.gameTime != null) {
-            out.append("#define stitch_game_time (").append(shape.gameTime).append(")\n");
+        return out.toString();
+    }
+
+    /** What a uniform reads where the reader can't give it: no time passes, the screen is one pixel. */
+    private static final Map<String, String> UNIFORM_FALLBACKS = Map.of("game_time", "0.0", "screen_size", "vec2(1.0)");
+
+    /**
+     * What the uniforms the stitches use read, declared in one stage where it isn't already. An include
+     * is always added: the program's own may sit in a block its defines leave out, and includes are
+     * guarded against a second copy.
+     */
+    private static String declarations(ProgramShape shape, Set<String> names, List<Token> tokens, String source) {
+        StringBuilder out = new StringBuilder();
+        for (String name : names) {
+            ProgramShape.Uniform u = shape.uniforms.get(name);
+            if (u == null || Glsl.declaresUniform(tokens, u.reads())) {
+                continue;
+            }
+            String declaration = u.declaration().strip();
+            if (declaration.startsWith("#") || source == null || !source.contains(declaration)) {
+                out.append(declaration).append('\n');
+            }
         }
-        if (vertex && shape.screenSize != null) {
-            out.append("#define stitch_screen_size (").append(shape.screenSize).append(")\n");
+        return out.toString();
+    }
+
+    /**
+     * The uniforms the stitches use: each a macro, stitch_&lt;name&gt;, for the reader's expression, or for
+     * its fallback where the reader has none, so the stitch still applies, standing still.
+     */
+    private static String macros(ProgramShape shape, Set<String> names) {
+        StringBuilder out = new StringBuilder();
+        for (String name : names) {
+            ProgramShape.Uniform u = shape.uniforms.get(name);
+            out.append("#define stitch_").append(name).append(" (")
+                .append(u == null ? UNIFORM_FALLBACKS.get(name) : u.expression()).append(")\n");
         }
         return out.toString();
     }
@@ -221,7 +259,7 @@ public final class Weaver {
         return out;
     }
 
-    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String beforeMain) {
+    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain) {
         List<Glsl.Call> calls = Glsl.calls(tokens, shape.textureFunctions, shape.sampler);
         // from the last, so earlier indexes stay right
         for (int c = calls.size() - 1; c >= 0; c--) {
@@ -235,6 +273,9 @@ public final class Weaver {
             throw new IllegalArgumentException("the fragment shader has no main");
         }
         tokens.add(statementStart(tokens, main[0]), new Token(Kind.SPACE, beforeMain + "\n"));
+        if (!top.isEmpty()) {
+            tokens.add(topInsertion(tokens), new Token(Kind.SPACE, "\n" + top));
+        }
         return Glsl.join(tokens);
     }
 

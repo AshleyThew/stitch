@@ -44,7 +44,9 @@ public final class IrisShape {
             // shader packs never draw into screens, so this is always the world
             .inScreen("false")
             // GLSL 330 without separate shader objects: varyings are matched by name, no layout locations
-            .layouts(false);
+            .layouts(false)
+            // shader packs' clock, in seconds: a Minecraft day is 1200 of them
+            .uniform("game_time", "fract(frameTimeCounter / 1200.0)", "frameTimeCounter", "uniform float frameTimeCounter;");
         if (viewSpace) {
             // the world's up, turned by the camera that drew this pass
             String view = shadow ? "shadowModelView" : "gbufferModelView";

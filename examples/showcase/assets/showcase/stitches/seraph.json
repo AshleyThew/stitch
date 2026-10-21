@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "targets": [
+    "armor"
+  ],
+  "vertex": "showcase:stitches/seraph.vert.glsl",
+  "fragment": "showcase:stitches/seraph.frag.glsl",
+  "varyings": [
+    {
+      "name": "on",
+      "type": "int",
+      "flat": true
+    },
+    {
+      "name": "rim",
+      "type": "float"
+    },
+    {
+      "name": "wing",
+      "type": "vec3"
+    }
+  ],
+  "uniforms": [
+    "game_time"
+  ],
+  "requires": [
+    "texture_size",
+    "orientation",
+    "vertex_corner"
+  ]
+}

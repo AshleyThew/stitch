@@ -26,6 +26,10 @@ final class CoreTargets {
      * the device has them (RENDERPEARL_INSTANCE_INDEX_INCLUDES_BASE_INSTANCE); elsewhere no corner (-1).
      */
     static final int DRAW_PARAMETERS_FROM = 97;
+    /** From 1.21.2 (format 42) a core shader has no program JSON; its uniforms are bound by name. */
+    static final int NO_PROGRAM_JSON_FROM = 42;
+    /** From 1.21.6 (format 63) the game time is in the Globals block every program can import. */
+    static final int GLOBALS_FROM = 63;
 
     static final String VIEW_ROTATION = "IViewRotMat";
 
@@ -72,8 +76,20 @@ final class CoreTargets {
             "(ProjMat[2][3] == 0.0 ? normalize(inverse(mat3(ModelViewMat)) * vec3(0.0, sign(ProjMat[1][1]), 0.0)) : " + worldUp + ")",
             "(ProjMat[2][3] == 0.0 ? sign(determinant(mat3(ModelViewMat))) * sign(ProjMat[0][0]) * sign(ProjMat[1][1]) : 1.0)");
         shape.preamble(preamble.toString());
+        if (format >= GLOBALS_FROM) {
+            // 26.3's shaders include with #include, earlier ones import with #moj_import
+            String include = vertex.contains("#include") ? "#include" : "#moj_import";
+            shape.uniform("game_time", "GameTime", "GameTime", include + " <minecraft:globals.glsl>");
+        } else {
+            // to 1.21.1 the program JSON lists it too (see GAME_TIME_UNIFORM)
+            shape.uniform("game_time", "GameTime", "GameTime", "uniform float GameTime;");
+        }
         return shape;
     }
+
+    /** The uniform the program JSON (to 1.21.1) must list for Minecraft to set the game time. */
+    static final Map<String, Object> GAME_TIME_UNIFORM = Map.of("name", "GameTime", "type", "float", "count", 1.0,
+        "values", List.of(0.0));
 
     /** The uniform the program JSON (to 1.21.1) must list for what the weaving added. */
     static final Map<String, Object> VIEW_ROTATION_UNIFORM = Map.of("name", VIEW_ROTATION, "type", "matrix3x3", "count", 9.0,

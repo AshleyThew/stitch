@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "targets": [
+    "armor"
+  ],
+  "vertex": "showcase:stitches/glitch.vert.glsl",
+  "fragment": "showcase:stitches/glitch.frag.glsl",
+  "varyings": [
+    {
+      "name": "on",
+      "type": "int",
+      "flat": true
+    },
+    {
+      "name": "torn",
+      "type": "float"
+    }
+  ],
+  "uniforms": [
+    "game_time"
+  ],
+  "requires": [
+    "texture_size",
+    "orientation"
+  ]
+}
