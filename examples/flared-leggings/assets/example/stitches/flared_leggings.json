@@ -1,0 +1,6 @@
+{
+  "format": 1,
+  "targets": ["armor"],
+  "vertex": "example:stitches/flared_leggings.vert.glsl",
+  "requires": ["texture_size"]
+}

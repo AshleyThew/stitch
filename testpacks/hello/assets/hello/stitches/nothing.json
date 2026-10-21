@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "targets": ["armor"],
+  "vertex": "hello:stitches/nothing.vert.glsl",
+  "fragment": "hello:stitches/nothing.frag.glsl",
+  "varyings": [{"name": "seen", "type": "float"}],
+  "requires": ["texture_size"]
+}

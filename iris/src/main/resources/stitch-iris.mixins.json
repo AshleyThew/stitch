@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "io.github.ashleythew.stitch.iris.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "io.github.ashleythew.stitch.iris.mixin.IrisMixinPlugin",
+  "client": ["TransformPatcherMixin", "LegacyNewShaderTestsMixin", "LegacyTransformPatcherMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

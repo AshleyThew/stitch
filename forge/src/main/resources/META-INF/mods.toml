@@ -1,0 +1,18 @@
+modLoader = "javafml"
+loaderVersion = "[40,)"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+
+[[mods]]
+modId = "stitch"
+version = "${version}"
+displayName = "Stitch"
+description = "Resource pack shaders (stitches) that keep working under shader packs."
+# client only: servers neither need it nor check for it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies.stitch]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft}"
+ordering = "NONE"
+side = "CLIENT"

@@ -1,0 +1,60 @@
+name: Stitch
+description: Weave a resource pack's stitches into Minecraft's core shaders for every release asked for, as pack overlays.
+author: AshleyThew
+branding:
+  icon: layers
+  color: purple
+
+inputs:
+  pack:
+    description: The pack's folder in the workspace (it has a pack.mcmeta).
+    default: "."
+  versions:
+    description: Minecraft releases to build for, a range ("1.20.5-1.21.4"), from one on ("1.18.2+"), or a list.
+    default: "1.18.2+"
+  output:
+    description: Where the overlays and pack.mcmeta are written, if not the pack folder.
+    default: ""
+  base:
+    description: Write the oldest range into the pack's base folder, for clients that read no overlays (before 1.20.2).
+    default: "true"
+  strict:
+    description: Fail on warnings too (a stitch left out for a capability a version can't give).
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    # Minecraft's shaders, fetched from Mojang's servers the first time; a release's never change
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/stitch/minecraft
+        key: stitch-minecraft-${{ runner.os }}-${{ inputs.versions }}
+        restore-keys: stitch-minecraft-${{ runner.os }}-
+
+    # the compiler built from this action's own source, at the version the workflow pinned
+    - name: Build the Stitch compiler
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: ./gradlew --no-daemon --quiet :compiler:jar
+
+    - name: Weave the pack's stitches
+      shell: bash
+      env:
+        PACK: ${{ inputs.pack }}
+        VERSIONS: ${{ inputs.versions }}
+        OUTPUT: ${{ inputs.output }}
+        BASE: ${{ inputs.base }}
+        STRICT: ${{ inputs.strict }}
+        COMPILER: ${{ github.action_path }}/compiler/build/libs/stitch-compiler.jar
+      run: |
+        args=("$PACK" --versions "$VERSIONS")
+        if [ -n "$OUTPUT" ]; then args+=(--output "$OUTPUT"); fi
+        if [ "$BASE" != "true" ]; then args+=(--no-base); fi
+        if [ "$STRICT" = "true" ]; then args+=(--strict); fi
+        java -jar "$COMPILER" "${args[@]}"
