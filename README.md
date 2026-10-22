@@ -145,17 +145,15 @@ accepted from 1.20.1 on:
 
 </details>
 
-**3. Point shader pack players at the mod.** One jar from the [latest release](https://github.com/AshleyThew/stitch/releases/latest), matching their game:
+**3. Point shader pack players at the mod.** One jar for every game:
+[`stitch.jar`](https://github.com/AshleyThew/stitch/releases/latest/download/stitch.jar), from the
+[latest release](https://github.com/AshleyThew/stitch/releases/latest). It goes in the game's `mods`
+folder, beside Iris or OptiFine:
 
-| Loader | Minecraft | Jar |
+| Loader | Shader mod | Minecraft |
 |---|---|---|
-| Fabric with Iris | 1.18.2 | `stitch-fabric-1.18.jar` |
-| | 1.19 to 1.21.11 | `stitch-fabric-1.19.jar` |
-| | 26.1 and 26.2 | `stitch-fabric-26.1.jar` |
-| | 26.3 on | `stitch-fabric-26.3.jar` |
-| Forge with OptiFine | 1.18.2 | `stitch-forge-1.18.jar` |
-| | 1.19 to 1.20.4 | `stitch-forge-1.19.jar` |
-| | 1.20.6 to 1.21.11 | `stitch-forge-1.20.6.jar` |
+| Fabric | Iris | 1.18.2 to 26.3 |
+| Forge | OptiFine | 1.18.2 to 1.21.11, wherever OptiFine runs on Forge |
 
 The mod needs nothing from the server, and does nothing without a shader pack.
 
@@ -194,14 +192,24 @@ The mod needs nothing from the server, and does nothing without a shader pack.
 ```
 ./gradlew :core:test
 ./gradlew :compiler:jar                                     the compiler the action runs
+```
+
+The mod is built in parts, one for each way a game names Minecraft's code, then merged into `stitch.jar`:
+
+```
 ./gradlew :fabric:legacy:remapJar -Pstitch.fabric=1.18      Fabric 1.18.2
 ./gradlew :fabric:legacy:remapJar -Pstitch.fabric=1.19      Fabric 1.19 to 1.21.11
-./gradlew :fabric:modern:jar -Pstitch.fabric=26.1 -Pstitch.minecraftJar=<26.1 client jar>
-./gradlew :fabric:modern:jar -Pstitch.fabric=26.3 -Pstitch.minecraftJar=<26.3 client jar>
 ./gradlew :forge:legacy:reobfJar -Pstitch.forge=1.18        Forge 1.18.2
 ./gradlew :forge:legacy:reobfJar -Pstitch.forge=1.19        Forge 1.19 to 1.20.4
-./gradlew :forge:modern:jar -Pstitch.minecraftJar=<26.1 client jar>
+./gradlew :fabric:modern:jar -Pstitch.fabric=26.1 -Pstitch.minecraftJar=<26.1 client jar>
+                                                            Fabric 26.1 and 26.2, Forge from 1.20.6
+./gradlew :fabric:modern:jar -Pstitch.fabric=26.3 -Pstitch.minecraftJar=<26.3 client jar>
+./gradlew :mod:jar                                          mod/build/libs/stitch.jar
 ```
+
+Each part's resource pack reader is moved into a package of its own, and the loader's entry point picks
+the running game's. Every class is Java 17's, since Forge 1.18.2 reads each class in a mod jar as it
+starts; `:mod:jar` checks that.
 
 Dependencies are pinned by checksum in `gradle/verification-metadata.xml`; a download that doesn't match
 fails the build.

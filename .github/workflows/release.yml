@@ -1,6 +1,6 @@
 name: Release
 
-# A version tag (v0.1.0) builds every mod jar and the compiler, publishes them as a GitHub release with
+# A version tag (v0.1.0) builds the mod jar and the compiler, publishes them as a GitHub release with
 # their checksums, and moves the action's major tag (v0) to it, so `uses: AshleyThew/stitch@v0` picks it
 # up. Run by hand, it only builds: a dry run.
 on:
@@ -67,18 +67,15 @@ jobs:
           mkdir -p out
           gradle :core:test :compiler:jar
           cp compiler/build/libs/stitch-compiler.jar out/
+          # the mod's parts, merged into the one stitch.jar (see mod/build.gradle.kts)
           for group in 1.18 1.19; do
             gradle :fabric:legacy:remapJar -Pstitch.fabric=$group
-            cp fabric/legacy/build/libs/stitch-fabric-$group.jar out/
             gradle :forge:legacy:reobfJar -Pstitch.forge=$group
-            cp forge/legacy/build/libs/stitch-forge-$group.jar out/
           done
           gradle :fabric:modern:jar -Pstitch.fabric=26.1 -Pstitch.minecraftJar="$PWD/minecraft/26.1.2.jar"
-          cp fabric/modern/build/libs/stitch-fabric-26.1.jar out/
           gradle :fabric:modern:jar -Pstitch.fabric=26.3 -Pstitch.minecraftJar="$PWD/minecraft/26.3.jar"
-          cp fabric/modern/build/libs/stitch-fabric-26.3.jar out/
-          gradle :forge:modern:jar -Pstitch.minecraftJar="$PWD/minecraft/26.1.2.jar"
-          cp forge/modern/build/libs/stitch-forge-1.20.6.jar out/
+          gradle :mod:jar
+          cp mod/build/libs/stitch.jar out/
           cd out && sha256sum *.jar > SHA256SUMS && cat SHA256SUMS
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -93,17 +90,12 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           cat > notes.md <<EOF
-          One jar a game, by loader and Minecraft version:
+          \`stitch.jar\` is the mod for every game, in the \`mods\` folder beside Iris or OptiFine:
 
-          | Loader | Minecraft | Jar |
+          | Loader | Shader mod | Minecraft |
           |---|---|---|
-          | Fabric with Iris | 1.18.2 | \`stitch-fabric-1.18.jar\` |
-          | | 1.19 to 1.21.11 | \`stitch-fabric-1.19.jar\` |
-          | | 26.1 and 26.2 | \`stitch-fabric-26.1.jar\` |
-          | | 26.3 on | \`stitch-fabric-26.3.jar\` |
-          | Forge with OptiFine | 1.18.2 | \`stitch-forge-1.18.jar\` |
-          | | 1.19 to 1.20.4 | \`stitch-forge-1.19.jar\` |
-          | | 1.20.6 to 1.21.11 | \`stitch-forge-1.20.6.jar\` |
+          | Fabric | Iris | 1.18.2 to 26.3 |
+          | Forge | OptiFine | 1.18.2 to 1.21.11, wherever OptiFine runs on Forge |
 
           Packs build their stitches in with the action: \`uses: AshleyThew/stitch@${TAG%%.*}\`.
 

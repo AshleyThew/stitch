@@ -21,6 +21,7 @@ val target = targets[jarGroup] ?: error("Stitch has no legacy Fabric jar $jarGro
 
 extra["stitch.range"] = target.range
 extra["stitch.resources"] = target.resources
+extra["stitch.variant"] = "intermediary" + jarGroup.replace(".", "")
 extra["stitch.jar"] = "stitch-fabric-$jarGroup-dev"
 apply(from = "../shared.gradle.kts")
 

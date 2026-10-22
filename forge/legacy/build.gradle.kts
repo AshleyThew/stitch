@@ -22,7 +22,7 @@ val target = targets[jarGroup] ?: error("Stitch has no legacy Forge jar $jarGrou
 extra["stitch.range"] = target.range
 extra["stitch.packFormats"] = target.packFormats
 extra["stitch.resources"] = target.resources
-extra["stitch.viewSpace"] = true
+extra["stitch.variant"] = "srg" + jarGroup.replace(".", "")
 extra["stitch.jar"] = "stitch-forge-$jarGroup-dev"
 apply(from = "../shared.gradle.kts")
 

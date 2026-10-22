@@ -12,4 +12,4 @@ pluginManagement {
 
 rootProject.name = "stitch"
 
-include("core", "compiler", "optifine", "iris", "fabric:legacy", "fabric:modern", "forge:legacy", "forge:modern")
+include("core", "compiler", "optifine", "iris", "fabric:legacy", "fabric:modern", "forge:legacy", "mod")

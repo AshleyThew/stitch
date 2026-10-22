@@ -2,6 +2,8 @@
   "pack": {
     "description": "Stitch",
     "pack_format": ${pack_format},
-    "supported_formats": [${pack_format}, ${pack_format_last}]
+    "supported_formats": [${pack_format}, ${pack_format_last}],
+    "min_format": ${pack_format},
+    "max_format": ${pack_format_last}
   }
 }
