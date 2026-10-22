@@ -185,6 +185,8 @@ The mod needs nothing from the server, and does nothing without a shader pack.
 - [Specification](docs/SPEC.md): every field, target, function and capability of a stitch.
 - [Showcase pack](examples/showcase/): the five armour sets above.
 - [Flared leggings](examples/flared-leggings/): the smallest complete example, one vertex function.
+- [Blockbench armour](examples/blockbench-armor/): a winged dragon knight built from Blockbench cubes and worn as armour (a
+  prototype of model stitches, for 1.18.2 and 1.21.4).
 
 <details>
 <summary><b>Building from source</b></summary>
