@@ -25,6 +25,10 @@ public final class IrisShape {
         viewSpace = value;
     }
 
+    private static boolean hasInput(String vertex, String name) {
+        return Pattern.compile("\\bin\\s+\\w+\\s+" + name + "\\s*;").matcher(vertex).find();
+    }
+
     static ProgramShape of(String name, String vertex, String fragment) {
         ProgramShape shape = new ProgramShape();
         String[][] inputs = {{"position", "iris_Position"}, {"uv", "iris_UV0"}, {"color", "iris_Color"},
@@ -41,6 +45,7 @@ public final class IrisShape {
         shape.albedo(sampler, Set.of("texture", "texture2D"))
             // Minecraft's own buffers, drawn in GL: four vertices a quad, from the draw's start
             .corner("(gl_VertexID % 4)")
+            .vertexIndex("gl_VertexID")
             // shader packs never draw into screens, so this is always the world
             .inScreen("false")
             // GLSL 330 without separate shader objects: varyings are matched by name, no layout locations
@@ -58,8 +63,25 @@ public final class IrisShape {
             // positions relative to the camera, along the world's axes
             shape.orientation("vec3(0.0, 1.0, 0.0)", "1.0").modelSpace();
         }
+        // a quad's corners shared by subgroup shuffles, where the program's GLSL can enable them (Iris
+        // hands over its programs finished, usually 330 core) and it reads Minecraft's own buffers
+        java.util.regex.Matcher version = Pattern.compile("#version\\s+(\\d+)").matcher(vertex);
+        if (version.find() && Integer.parseInt(version.group(1)) >= 140
+            && shape.capabilities().contains("vertex_corner") && hasInput(vertex, "iris_Position") && hasInput(vertex, "iris_UV0")) {
+            shape.quadCorners("iris_Position", "iris_UV0", "gl_VertexID",
+                "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
+        }
+        // Iris's entity vertices carry the quad's tangent, bound to at_tangent where a program declares it
+        boolean declared = Pattern.compile("\\b(in|attribute)\\s+vec4\\s+at_tangent\\s*;").matcher(vertex).find();
+        shape.tangent("at_tangent", declared ? null : "in vec4 at_tangent;");
         if (shadow) {
             shape.shadow();
+        } else if (Pattern.compile("uniform\\s+mat4\\s+iris_ProjMat\\s*;").matcher(vertex).find()
+            && Pattern.compile("uniform\\s+mat4\\s+iris_ModelViewMat\\s*;").matcher(vertex).find()) {
+            // Iris projects its own buffers' vertices by Minecraft's matrices, renamed, into OpenGL's depth
+            shape.fragmentPosition().fragmentDepth(
+                "vec4 c = iris_ProjMat * iris_ModelViewMat * vec4(p, 1.0);\n    return c.z / c.w * 0.5 + 0.5;",
+                "uniform mat4 iris_ProjMat;\nuniform mat4 iris_ModelViewMat;");
         }
         return shape;
     }

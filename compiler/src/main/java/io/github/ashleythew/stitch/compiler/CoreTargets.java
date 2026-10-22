@@ -62,6 +62,31 @@ final class CoreTargets {
             #endif
             """);
         shape.corner("(STITCH_VERTEX_ID < 0 ? -1 : STITCH_VERTEX_ID % 4)");
+        shape.vertexIndex("(STITCH_VERTEX_ID < 0 ? -1 : STITCH_VERTEX_ID)");
+        if (format < DRAW_PARAMETERS_FROM) {
+            // a quad's corners shared by subgroup shuffles, where the driver has them (26.3's Vulkan GLSL
+            // is left out: there they would need a newer SPIR-V than Minecraft asks for)
+            shape.quadCorners("Position", "UV0", "STITCH_VERTEX_ID",
+                "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
+        }
+        // What a stitch draws can sit where it says, at its depth. A point's window depth is found the
+        // way this fragment's own was: OpenGL maps -1 to 1 onto 0 to 1, a Vulkan-style renderer (26.3)
+        // takes 0 to 1 as it is, and the fragment's own point tells which.
+        String depth = "vec4 c = ProjMat * ModelViewMat * vec4(p, 1.0);\n"
+            + "    vec4 h = ProjMat * ModelViewMat * vec4(stitch_fragment_position, 1.0);\n"
+            + "    float zh = h.z / h.w;\n"
+            + "    float z = c.z / c.w;\n"
+            + "    return abs(gl_FragCoord.z - (zh * 0.5 + 0.5)) < abs(gl_FragCoord.z - zh) ? z * 0.5 + 0.5 : z;";
+        String matrices;
+        if (format < GLOBALS_FROM) {
+            // uniforms bound by name (and listed in the program JSON, to 1.21.1)
+            matrices = "uniform mat4 ModelViewMat;\nuniform mat4 ProjMat;";
+        } else {
+            // from 1.21.6 they are uniform blocks, imported
+            String include = vertex.contains("#include") ? "#include" : "#moj_import";
+            matrices = include + " <minecraft:dynamictransforms.glsl>\n" + include + " <minecraft:projection.glsl>";
+        }
+        shape.fragmentPosition().fragmentDepth(depth, matrices);
         String worldUp = "vec3(0.0, 1.0, 0.0)";
         if (format < MODEL_SPACE_FROM) {
             worldUp = "(transpose(" + VIEW_ROTATION + ") * vec3(0.0, 1.0, 0.0))";

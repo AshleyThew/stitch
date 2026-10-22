@@ -46,6 +46,7 @@ public final class OptiFineShape {
         shape.albedo(sampler, Set.of("texture", "texture2D"))
             // Minecraft's own buffers, drawn in GL: four vertices a quad, from the draw's start
             .corner("(gl_VertexID % 4)")
+            .vertexIndex("gl_VertexID")
             .inScreen("false")
             // varyings are matched by name, no layout locations
             .layouts(false)
@@ -61,8 +62,28 @@ public final class OptiFineShape {
         } else {
             shape.orientation("vec3(0.0, 1.0, 0.0)", "1.0").modelSpace();
         }
+        if (vertex) {
+            // OptiFine gives entity vertices the quad's tangent as at_tangent, where a program declares it
+            boolean declared = Pattern.compile("\\b(in|attribute)\\s+vec4\\s+at_tangent\\s*;").matcher(source).find();
+            String keyword = Pattern.compile("\\battribute\\s").matcher(source).find() ? "attribute" : "in";
+            shape.tangent("at_tangent", declared ? null : keyword + " vec4 at_tangent;");
+            // a quad's corners shared by subgroup shuffles, where the program's GLSL can enable them
+            java.util.regex.Matcher version = Pattern.compile("#version\\s+(\\d+)").matcher(source);
+            if (version.find() && Integer.parseInt(version.group(1)) >= 140
+                && Pattern.compile("\\bin\\s+vec3\\s+vaPosition\\s*;").matcher(source).find()
+                && Pattern.compile("\\bin\\s+vec2\\s+vaUV0\\s*;").matcher(source).find()) {
+                shape.quadCorners("vaPosition", "vaUV0", "gl_VertexID",
+                    "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
+            }
+        }
         if (shadow) {
             shape.shadow();
+        } else {
+            // OptiFine projects Minecraft's buffers by Minecraft's matrices, under its own names, into
+            // OpenGL's depth; both shaders are told, so a stitch sees the same capabilities in each
+            shape.fragmentPosition().fragmentDepth(
+                "vec4 c = projectionMatrix * modelViewMatrix * vec4(p, 1.0);\n    return c.z / c.w * 0.5 + 0.5;",
+                "uniform mat4 projectionMatrix;\nuniform mat4 modelViewMatrix;");
         }
         return shape;
     }

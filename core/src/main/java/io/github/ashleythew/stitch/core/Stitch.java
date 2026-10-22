@@ -20,7 +20,8 @@ public final class Stitch {
 
     public static final Set<String> TARGETS = Set.of("armor", "entity", "item_world", "item_gui", "text_world", "text_gui", "glint");
     public static final Set<String> UNIFORMS = Set.of("game_time", "screen_size");
-    public static final Set<String> CAPABILITIES = Set.of("vertex_corner", "texture_size", "position_model_space", "orientation", "shadow_pass");
+    public static final Set<String> CAPABILITIES = Set.of("vertex_corner", "texture_size", "position_model_space", "orientation", "shadow_pass",
+        "quad_corners", "tangent", "fragment_position", "fragment_depth", "vertex_index");
     public static final Set<String> PASSES = Set.of("main", "shadow");
     private static final Set<String> TYPES = Set.of("float", "vec2", "vec3", "vec4", "int", "ivec2", "ivec3", "ivec4");
     private static final Pattern ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
@@ -38,11 +39,12 @@ public final class Stitch {
     private final List<Varying> varyings;
     private final Set<String> uniforms;
     private final Set<String> requires;
+    private final Set<String> uses;
     private final Set<String> passes;
     private final int order;
 
     private Stitch(String id, List<String> targets, String vertex, String fragment, List<Varying> varyings,
-                   Set<String> uniforms, Set<String> requires, Set<String> passes, int order) {
+                   Set<String> uniforms, Set<String> requires, Set<String> uses, Set<String> passes, int order) {
         this.id = id;
         this.targets = targets;
         this.vertex = vertex;
@@ -50,6 +52,7 @@ public final class Stitch {
         this.varyings = varyings;
         this.uniforms = uniforms;
         this.requires = requires;
+        this.uses = uses;
         this.passes = passes;
         this.order = order;
     }
@@ -115,13 +118,15 @@ public final class Stitch {
         }
         Set<String> uniforms = new LinkedHashSet<>(strings(id, map, "uniforms", UNIFORMS, false));
         Set<String> requires = new LinkedHashSet<>(strings(id, map, "requires", null, false));
+        // capabilities it takes where the reader has them, checking STITCH_HAS_<NAME>, and does without
+        Set<String> uses = new LinkedHashSet<>(strings(id, map, "uses", CAPABILITIES, false));
         List<String> passes = strings(id, map, "passes", PASSES, false);
         Object order = map.get("order");
         if (order != null && !(order instanceof Double)) {
             throw new StitchException(id, "order isn't a number");
         }
         return new Stitch(id, Collections.unmodifiableList(targets), vertex, fragment, Collections.unmodifiableList(varyings),
-            Collections.unmodifiableSet(uniforms), Collections.unmodifiableSet(requires),
+            Collections.unmodifiableSet(uniforms), Collections.unmodifiableSet(requires), Collections.unmodifiableSet(uses),
             Collections.unmodifiableSet(new LinkedHashSet<>(passes.isEmpty() ? List.of("main", "shadow") : passes)),
             order == null ? 0 : ((Double) order).intValue());
     }
@@ -200,6 +205,10 @@ public final class Stitch {
 
     public Set<String> requires() {
         return requires;
+    }
+
+    public Set<String> uses() {
+        return uses;
     }
 
     public Set<String> passes() {

@@ -29,6 +29,7 @@ with ordinary pack overlays; Stitch reads what the resource manager resolves.
   ],
   "uniforms": ["game_time"],
   "requires": ["vertex_corner", "texture_size"],
+  "uses": ["fragment_depth"],
   "passes": ["main", "shadow"],
   "order": 0
 }
@@ -42,6 +43,7 @@ with ordinary pack overlays; Stitch reads what the resource manager resolves.
 | `varyings` | no | Values the vertex function hands the fragment function. Types: `float`, `vec2`-`vec4`, `int`, `ivec2`-`ivec4` (ints must be `flat`). At most 4 per stitch. |
 | `uniforms` | no | Values the reader supplies, from the fixed list below. |
 | `requires` | no | Capabilities it needs. A reader that can't give one skips the whole stitch for that target; never half of it. |
+| `uses` | no | Capabilities it uses where the program has them. The stitch applies either way; `#ifdef STITCH_HAS_<CAPABILITY>` (`STITCH_HAS_FRAGMENT_DEPTH`) says which it got, in both functions. |
 | `passes` | no | `main`, `shadow`, or both (default both). Shapes belong in both, so shadows match. |
 | `order` | no | Lower runs first among one pack's stitches. Across packs, pack order decides (lowest pack first). |
 
@@ -100,6 +102,7 @@ vec4 stitch_texel(StitchFragment f, vec4 texel);
 struct StitchFragment {
     vec2 uv;          // as the vertex function left it, interpolated
     bool shadow;      // in the shadow pass
+    vec3 position;    // the vertex function's position, interpolated (fragment_position); else 0
 };
 ```
 
@@ -119,11 +122,15 @@ reconstruction) gets the function on each sample.
 | `stitch_handedness()` | `orientation` | 1, or -1 where that space is mirrored, so `cross(stitch_up(), normal) * stitch_handedness()` always runs to the model's left on its front. Vertex only |
 | `stitch_game_time` | uniform `game_time` | 0-1 over twenty minutes, Minecraft's day (`* 1200.0` gives seconds); in both functions. Under a shader pack it runs on the shader pack's clock |
 | `stitch_screen_size` | uniform `screen_size` | Framebuffer size in pixels |
+| `stitch_vertex_index()` | `vertex_index` | The vertex's number in its draw, counted as `corner` is (-1 where it can't be). Vertex only |
+| `stitch_quad_corners(out vec3 position[4], out vec2 uv[4])` | `quad_corners` | The quad's four corners as submitted (before any stitch moved them), in corner order. Returns false, and leaves them 0, where the device can't share them this time: a stitch keeps a way to work without. Vertex only |
+| `stitch_tangent()` | `tangent` | The quad's tangent as the shader pack hands it over. Vertex only |
+| `stitch_set_depth(vec3 p)` | `fragment_depth` | Draw this fragment at the depth of `p`, a point in `position`'s space, instead of its own. Fragment only |
+| varyings | listed in `varyings` | Read and write by name, in both functions |
 
 A uniform a reader has no source for still compiles: `stitch_game_time` reads 0 (the stitch applies,
 standing still) and `stitch_screen_size` reads 1×1. Minecraft 1.21.5 is such a release for
 `game_time`: it binds no clock to the armour shader.
-| varyings | listed in `varyings` | Read and write by name, in both functions |
 
 Names a stitch declares itself (functions, constants) are kept private to it: the reader prefixes them
 per stitch, so two packs can both have a `tint`.
@@ -137,6 +144,11 @@ per stitch, so two packs can both have a `tint`.
 | `position_model_space` | `position` is model space (always true from 1.20.5) |
 | `orientation` | `stitch_up()` and `stitch_handedness()` work (the reader works them out from its matrices, which stitches can't read) |
 | `shadow_pass` | The stitch runs in shadow programs too |
+| `vertex_index` | `stitch_vertex_index()` works |
+| `quad_corners` | `stitch_quad_corners()` is there; it may still return false on a device without subgroup shuffles (macOS), so a stitch should list this in `uses`, not `requires` |
+| `tangent` | `stitch_tangent()` works (shader packs, which give entity vertices one) |
+| `fragment_position` | `StitchFragment.position` is the interpolated position |
+| `fragment_depth` | `stitch_set_depth()` works: the fragment's depth is written from the point (so the program loses early depth testing; give it only to stitches that need it). A depth set in the shadow pass is not supported |
 
 ## Limits
 

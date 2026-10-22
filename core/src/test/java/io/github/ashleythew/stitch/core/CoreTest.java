@@ -217,6 +217,37 @@ class CoreTest {
     }
 
     @Test
+    void usesWhatTheProgramCanGive() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
+                + " \"uses\": [\"fragment_depth\"]}",
+            Map.of("test:v", "void stitch_vertex(inout StitchVertex v) {}",
+                "test:f", "vec4 stitch_texel(StitchFragment f, vec4 texel) {\n#ifdef STITCH_HAS_FRAGMENT_DEPTH\n"
+                    + "    stitch_set_depth(f.position);\n#endif\n    return texel;\n}"));
+        ProgramShape shape = new ProgramShape().input("position", "Position").albedo("Sampler0", Set.of("texture"))
+            .fragmentPosition().fragmentDepth("return p.z;", "uniform mat4 ProjMat;");
+        Weaver.Woven w = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s));
+        assertEquals(List.of("test:s"), w.applied());
+        for (String stage : List.of(w.vertex(), w.fragment())) {
+            assertTrue(stage.contains("#define STITCH_HAS_FRAGMENT_DEPTH"));
+            assertTrue(stage.contains("#define STITCH_HAS_FRAGMENT_POSITION"));
+        }
+        // the fragment's point comes from the vertex, and its depth is written last in main
+        assertTrue(w.vertex().contains("out vec3 stitch_fragment_position;"));
+        assertTrue(w.fragment().contains("in vec3 stitch_fragment_position;"));
+        assertTrue(w.fragment().contains("float stitch_depth_of(vec3 p) {\n    return p.z;\n}"));
+        String main = w.fragment().substring(w.fragment().indexOf("void main()"));
+        assertTrue(main.contains("gl_FragDepth = stitch_depth_set ? stitch_depth_of(stitch_depth_position) : gl_FragCoord.z;\n}"));
+        // ProjMat is declared once, where the program has it already
+        assertEquals(1, w.fragment().split("uniform mat4 ProjMat;", -1).length - 1);
+        // without the capability the stitch still applies, and leaves the depth alone
+        Weaver.Woven plain = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position")
+            .albedo("Sampler0", Set.of("texture")), List.of(s));
+        assertEquals(List.of("test:s"), plain.applied());
+        assertFalse(plain.fragment().contains("gl_FragDepth"));
+        assertFalse(plain.fragment().contains("#define STITCH_HAS_FRAGMENT_DEPTH"));
+    }
+
+    @Test
     void shadowOnlyWhereAsked() {
         Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"passes\": [\"main\"]}",
             Map.of("test:v", "void stitch_vertex(inout StitchVertex v) {}"));

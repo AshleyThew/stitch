@@ -26,6 +26,19 @@ public final class ProgramShape {
     boolean layouts = false;
     String vertexHeader = null;
     String preamble = "";
+    /** The vertex inputs a quad's corners are shared from (quad_corners), and the lines that enable it. */
+    String quadPosition = null;
+    String quadUv = null;
+    String quadId = null;
+    String quadExtensions = "";
+    /** A GLSL expression for the quad's tangent (tangent), and what declares what it reads. */
+    String tangent = null;
+    String tangentDeclaration = null;
+    /** A GLSL expression for the vertex's number in its draw (vertex_index). */
+    String vertexIndex = null;
+    /** The body of float stitch_depth_of(vec3 p): a point in position space to its window depth. */
+    String depth = null;
+    String depthDeclaration = null;
     final java.util.HashSet<String> capabilities = new java.util.HashSet<>();
 
     /** The program reads this StitchVertex field from that input (Position, vaPosition, gl_Vertex...). */
@@ -104,6 +117,54 @@ public final class ProgramShape {
     /** GLSL put before the helpers in the vertex shader: macros its expressions use. */
     public ProgramShape preamble(String glsl) {
         this.preamble = glsl;
+        return this;
+    }
+
+    /**
+     * Each vertex can read its quad's four corners as submitted (position and uv inputs; id, the vertex's
+     * index in the draw, checks the four are one quad), shared between
+     * the quad's vertices by the extension lines given (put at the top of the vertex shader), where the
+     * device has them: the stitch's stitch_quad_corners() says whether it did.
+     */
+    public ProgramShape quadCorners(String position, String uv, String id, String extensions) {
+        this.quadPosition = position;
+        this.quadUv = uv;
+        this.quadId = id;
+        this.quadExtensions = extensions;
+        capabilities.add("quad_corners");
+        return this;
+    }
+
+    /** A GLSL expression for the quad's tangent (xyz towards +u, w the handedness), and its declaration. */
+    public ProgramShape tangent(String expression, String declaration) {
+        this.tangent = expression;
+        this.tangentDeclaration = declaration;
+        capabilities.add("tangent");
+        return this;
+    }
+
+    /** A GLSL expression for the vertex's index in its draw, counted from 0, or -1 where it can't be known. */
+    public ProgramShape vertexIndex(String expression) {
+        this.vertexIndex = expression;
+        capabilities.add("vertex_index");
+        return this;
+    }
+
+    /** The fragment function is told its point in the vertex's position space (fragment_position). */
+    public ProgramShape fragmentPosition() {
+        capabilities.add("fragment_position");
+        return this;
+    }
+
+    /**
+     * A stitch may set the depth of what it draws (fragment_depth): the body of a function from a point in
+     * position space (p) to its window depth, and the uniforms it reads, declared where the fragment
+     * shader doesn't already.
+     */
+    public ProgramShape fragmentDepth(String body, String declaration) {
+        this.depth = body;
+        this.depthDeclaration = declaration;
+        capabilities.add("fragment_depth");
         return this;
     }
 

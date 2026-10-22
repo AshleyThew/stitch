@@ -64,8 +64,22 @@ public final class Weaver {
         List<Token> ft = Glsl.tokens(fragment == null ? "" : fragment);
         int location = Math.max(Glsl.highestLocation(vt), Glsl.highestLocation(ft)) + 1;
 
-        StringBuilder vertexTop = new StringBuilder("\n// Stitch: the vertex as the stitches leave it\n");
+        Set<String> wanted = new java.util.TreeSet<>();
+        use.forEach(s -> {
+            wanted.addAll(s.requires());
+            wanted.addAll(s.uses());
+        });
+        boolean quad = wanted.contains("quad_corners") && shape.quadPosition != null;
+        boolean depth = wanted.contains("fragment_depth") && shape.depth != null;
+        // a depth is found from the fragment's own point, so it brings the fragment's position along
+        boolean fragmentPosition = (wanted.contains("fragment_position") || depth) && shape.capabilities.contains("fragment_position");
+        // extensions first: nothing but directives may come before them
+        StringBuilder vertexTop = new StringBuilder(quad ? "\n" + shape.quadExtensions.strip() + "\n" : "");
+        vertexTop.append("\n// Stitch: the vertex as the stitches leave it\n");
         vertexTop.append(STRUCTS);
+        if (wanted.contains("tangent") && shape.tangentDeclaration != null) {
+            vertexTop.append(shape.tangentDeclaration.strip()).append('\n');
+        }
         for (String[] f : FIELDS) {
             vertexTop.append(f[1]).append(" stitch_").append(f[0]).append(";\n");
         }
@@ -73,6 +87,11 @@ public final class Weaver {
 
         StringBuilder varyingsOut = new StringBuilder();
         StringBuilder varyingsIn = new StringBuilder();
+        if (fragmentPosition) {
+            String layout = shape.layouts ? "layout(location = " + location++ + ") " : "";
+            varyingsOut.append(layout).append("out vec3 ").append(FRAGMENT_POSITION).append(";\n");
+            varyingsIn.append(layout).append("in vec3 ").append(FRAGMENT_POSITION).append(";\n");
+        }
         StringBuilder vertexCode = new StringBuilder(shape.preamble);
         if (shape.capabilities.contains("texture_size") && !Glsl.declaresUniform(vt, shape.sampler)) {
             vertexCode.append("uniform sampler2D ").append(shape.sampler).append(";\n");
@@ -82,14 +101,28 @@ public final class Weaver {
         // what the uniforms read is declared at the top (a renderer may only take its includes there)
         vertexTop.append(declarations(shape, uniforms, vt, vertex));
         vertexCode.append(macros(shape, uniforms));
-        vertexCode.append(helpers(shape, true));
+        vertexCode.append(helpers(shape, true, quad, wanted.contains("tangent")));
         String fragmentTop = declarations(shape, uniforms, ft, fragment);
+        if (depth && shape.depthDeclaration != null) {
+            for (String line : shape.depthDeclaration.strip().split("\n")) {
+                String[] words = line.replace(";", "").trim().split("\\s+");
+                if (!Glsl.declaresUniform(ft, words[words.length - 1]) && (fragment == null || !fragment.contains(line.strip()))) {
+                    fragmentTop += line.strip() + "\n";
+                }
+            }
+        }
         StringBuilder fragmentCode = new StringBuilder(STRUCTS);
+        if (depth) {
+            // where a stitch says the surface really is; its depth is written at the end of main
+            fragmentCode.append("vec3 stitch_depth_position = vec3(0.0);\nbool stitch_depth_set = false;\n")
+                .append("void stitch_set_depth(vec3 position) {\n    stitch_depth_position = position;\n    stitch_depth_set = true;\n}\n")
+                .append("float stitch_depth_of(vec3 p) {\n    ").append(shape.depth.strip()).append("\n}\n");
+        }
         if (shape.capabilities.contains("texture_size") && !Glsl.declaresUniform(ft, shape.sampler)) {
             fragmentCode.append("uniform sampler2D ").append(shape.sampler).append(";\n");
         }
         fragmentCode.append(macros(shape, uniforms));
-        fragmentCode.append(helpers(shape, false));
+        fragmentCode.append(helpers(shape, false, false, false));
         StringBuilder run = new StringBuilder("void stitch_run() {\n    StitchVertex v = StitchVertex(");
         for (int i = 0; i < FIELDS.length; i++) {
             String name = shape.inputs.get(FIELDS[i][0]);
@@ -97,7 +130,7 @@ public final class Weaver {
         }
         run.append(", ").append(shape.corner != null ? "stitch_corner_index()" : "0").append(", false);\n");
         StringBuilder texel = new StringBuilder("vec4 stitch_texel_all(vec4 texel, vec2 uv) {\n    StitchFragment f = StitchFragment(uv, ")
-            .append(shape.shadow).append(");\n");
+            .append(shape.shadow).append(", ").append(fragmentPosition ? FRAGMENT_POSITION : "vec3(0.0)").append(");\n");
 
         for (Stitch s : use) {
             Map<String, String> names = new HashMap<>();
@@ -133,13 +166,17 @@ public final class Weaver {
         for (String[] f : FIELDS) {
             run.append("    stitch_").append(f[0]).append(" = v.").append(f[0]).append(";\n");
         }
-        run.append("    stitch_hidden = v.hidden;\n}\n");
+        run.append("    stitch_hidden = v.hidden;\n");
+        if (fragmentPosition) {
+            run.append("    ").append(FRAGMENT_POSITION).append(" = v.position;\n");
+        }
+        run.append("}\n");
         texel.append("    return texel;\n}\n");
         vertexCode.append(run);
         fragmentCode.append(texel);
 
         String wovenVertex = vertex == null ? null : weaveVertex(vt, shape, vertexTop.toString(), varyingsOut + vertexCode.toString());
-        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop, varyingsIn + fragmentCode.toString());
+        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop, varyingsIn + fragmentCode.toString(), depth);
         return new Woven(wovenVertex, wovenFragment, applied, skipped);
     }
 
@@ -157,10 +194,14 @@ public final class Weaver {
         struct StitchFragment {
             vec2 uv;
             bool shadow;
+            vec3 position;
         };
         """;
 
-    private static String helpers(ProgramShape shape, boolean vertex) {
+    /** The fragment's point in the vertex's position space, handed over by the reader (fragment_position). */
+    private static final String FRAGMENT_POSITION = "stitch_fragment_position";
+
+    private static String helpers(ProgramShape shape, boolean vertex, boolean quad, boolean tangent) {
         StringBuilder out = new StringBuilder();
         if (shape.capabilities.contains("texture_size")) {
             out.append("ivec2 stitch_texture_size() { return textureSize(").append(shape.sampler).append(", 0); }\n");
@@ -176,8 +217,46 @@ public final class Weaver {
             out.append("vec3 stitch_up() { return ").append(shape.up).append("; }\n");
             out.append("float stitch_handedness() { return ").append(shape.handedness).append("; }\n");
         }
+        if (vertex && shape.vertexIndex != null) {
+            out.append("int stitch_vertex_index() { return ").append(shape.vertexIndex).append("; }\n");
+        }
+        if (vertex && tangent && shape.tangent != null) {
+            out.append("vec4 stitch_tangent() { return ").append(shape.tangent).append("; }\n");
+        }
+        if (vertex && quad) {
+            out.append(QUAD.replace("$POSITION", shape.quadPosition).replace("$UV", shape.quadUv)
+                .replace("$ID", shape.quadId));
+        }
         return out.toString();
     }
+
+    /**
+     * A quad's four corners, as submitted, shared between its vertices by subgroup shuffles: only where the
+     * four sit in one subgroup in order (their vertex ids say so), else false.
+     */
+    private static final String QUAD = """
+        bool stitch_quad_corners(out vec3 position[4], out vec2 uv[4]) {
+        #if defined(GL_KHR_shader_subgroup_shuffle) && defined(GL_KHR_shader_subgroup_basic)
+            int c = stitch_corner_index();
+            int id = $ID;
+            uint lane = gl_SubgroupInvocationID;
+            bool ok = c >= 0 && lane >= uint(c) && lane - uint(c) + 3u < gl_SubgroupSize;
+            for (int i = 0; i < 4; i++) {
+                uint from = ok ? lane - uint(c) + uint(i) : lane;
+                position[i] = subgroupShuffle(vec3($POSITION), from);
+                uv[i] = subgroupShuffle(vec2($UV), from);
+                ok = ok && subgroupShuffle(id, from) == id - c + i;
+            }
+            return ok;
+        #else
+            for (int i = 0; i < 4; i++) {
+                position[i] = vec3(0.0);
+                uv[i] = vec2(0.0);
+            }
+            return false;
+        #endif
+        }
+        """;
 
     /** What a uniform reads where the reader can't give it: no time passes, the screen is one pixel. */
     private static final Map<String, String> UNIFORM_FALLBACKS = Map.of("game_time", "0.0", "screen_size", "vec2(1.0)");
@@ -208,6 +287,10 @@ public final class Weaver {
      */
     private static String macros(ProgramShape shape, Set<String> names) {
         StringBuilder out = new StringBuilder();
+        // what this program can give, for stitches that use a capability where it's there
+        for (String c : new java.util.TreeSet<>(shape.capabilities)) {
+            out.append("#define STITCH_HAS_").append(c.toUpperCase(java.util.Locale.ROOT)).append('\n');
+        }
         for (String name : names) {
             ProgramShape.Uniform u = shape.uniforms.get(name);
             out.append("#define stitch_").append(name).append(" (")
@@ -259,7 +342,7 @@ public final class Weaver {
         return out;
     }
 
-    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain) {
+    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain, boolean depth) {
         List<Glsl.Call> calls = Glsl.calls(tokens, shape.textureFunctions, shape.sampler);
         // from the last, so earlier indexes stay right
         for (int c = calls.size() - 1; c >= 0; c--) {
@@ -271,6 +354,10 @@ public final class Weaver {
         int[] main = Glsl.main(tokens);
         if (main == null) {
             throw new IllegalArgumentException("the fragment shader has no main");
+        }
+        if (depth) {
+            // every fragment that reaches the end writes a depth: the stitch's surface, or its own
+            tokens.add(main[1], new Token(Kind.SPACE, "    gl_FragDepth = stitch_depth_set ? stitch_depth_of(stitch_depth_position) : gl_FragCoord.z;\n"));
         }
         tokens.add(statementStart(tokens, main[0]), new Token(Kind.SPACE, beforeMain + "\n"));
         if (!top.isEmpty()) {
