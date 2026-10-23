@@ -37,11 +37,31 @@ runs:
         key: stitch-minecraft-${{ runner.os }}-${{ inputs.versions }}
         restore-keys: stitch-minecraft-${{ runner.os }}-
 
-    # the compiler built from this action's own source, at the version the workflow pinned
+    # The compiler built from this action's own source, at the version the workflow pinned. It is kept in
+    # the workflow repository's cache under its sources' hash, so each version is built once, not on
+    # every run (or every job of one).
+    - name: Hash the compiler's sources
+      id: sources
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        hash=$(find compiler core gradle settings.gradle.kts build.gradle.kts gradle.properties -type f -not -path '*/build/*' \
+          | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -c1-16)
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ github.action_path }}/compiler/build/libs/stitch-compiler.jar
+        key: stitch-compiler-${{ steps.sources.outputs.hash }}
+
     - name: Build the Stitch compiler
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: ./gradlew --no-daemon --quiet :compiler:jar
+      # from the cache, or from an earlier step of this job
+      run: |
+        if [ ! -f compiler/build/libs/stitch-compiler.jar ]; then
+          ./gradlew --no-daemon --quiet :compiler:jar
+        fi
 
     - name: Weave the pack's stitches
       shell: bash
