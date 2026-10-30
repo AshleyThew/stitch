@@ -52,11 +52,17 @@ final class CoreTargets {
         if (format >= DRAW_PARAMETERS_FROM) {
             shape.vertexHeader("#version 450\n#extension GL_ARB_shader_draw_parameters : enable\n#define STITCH_DRAW_PARAMETERS");
         }
+        // A vertex's number from its draw's start. OpenGL's gl_VertexID counts from the buffer's, the base
+        // vertex included: 26.2 draws entities from a shared buffer at a base vertex that needn't be a
+        // multiple of 4, which puts every corner in the wrong place. Taken off where the driver has draw
+        // parameters; 0 for a draw from the buffer's start, so nothing changes for the releases before.
         preamble.append("""
             #if defined(VULKAN) && defined(STITCH_DRAW_PARAMETERS) && defined(RENDERPEARL_INSTANCE_INDEX_INCLUDES_BASE_INSTANCE)
             #define STITCH_VERTEX_ID (gl_VertexIndex - gl_BaseVertexARB)
             #elif defined(VULKAN)
             #define STITCH_VERTEX_ID (-4)
+            #elif defined(GL_ARB_shader_draw_parameters)
+            #define STITCH_VERTEX_ID (gl_VertexID - gl_BaseVertexARB)
             #else
             #define STITCH_VERTEX_ID gl_VertexID
             #endif
@@ -67,7 +73,7 @@ final class CoreTargets {
             // a quad's corners shared by subgroup shuffles, where the driver has them (26.3's Vulkan GLSL
             // is left out: there they would need a newer SPIR-V than Minecraft asks for)
             shape.quadCorners("Position", "UV0", "STITCH_VERTEX_ID",
-                "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
+                "#extension GL_ARB_shader_draw_parameters : enable\n#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
         }
         // What a stitch draws can sit where it says, at its depth. A point's window depth is found the
         // way this fragment's own was: OpenGL maps -1 to 1 onto 0 to 1, a Vulkan-style renderer (26.3)
