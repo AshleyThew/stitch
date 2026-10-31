@@ -175,8 +175,12 @@ public final class Weaver {
         vertexCode.append(run);
         fragmentCode.append(texel);
 
-        String wovenVertex = vertex == null ? null : weaveVertex(vt, shape, vertexTop.toString(), varyingsOut + vertexCode.toString());
-        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop, varyingsIn + fragmentCode.toString(), depth);
+        String vertexFirst = shape.varyingsFirst ? varyingsOut.toString() : "";
+        String fragmentFirst = shape.varyingsFirst ? varyingsIn.toString() : "";
+        String wovenVertex = vertex == null ? null : weaveVertex(vt, shape, vertexTop + vertexFirst,
+            (shape.varyingsFirst ? "" : varyingsOut) + vertexCode.toString());
+        String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop + fragmentFirst,
+            (shape.varyingsFirst ? "" : varyingsIn) + fragmentCode.toString(), depth);
         return new Woven(wovenVertex, wovenFragment, applied, skipped);
     }
 
@@ -344,6 +348,9 @@ public final class Weaver {
 
     private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain, boolean depth) {
         List<Glsl.Call> calls = Glsl.calls(tokens, shape.textureFunctions, shape.sampler);
+        if (shape.mainIsWrapper) {
+            top += "vec4 stitch_texel_all(vec4 texel, vec2 uv);\n";
+        }
         // from the last, so earlier indexes stay right
         for (int c = calls.size() - 1; c >= 0; c--) {
             Glsl.Call call = calls.get(c);

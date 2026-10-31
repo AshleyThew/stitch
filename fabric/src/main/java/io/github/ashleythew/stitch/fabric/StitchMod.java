@@ -2,22 +2,26 @@ package io.github.ashleythew.stitch.fabric;
 
 import io.github.ashleythew.stitch.iris.IrisShape;
 import io.github.ashleythew.stitch.iris.IrisWeaving;
+import io.github.ashleythew.stitch.lilo.LiloWeaving;
 import io.github.ashleythew.stitch.minecraft.Readers;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.VersionParsingException;
 
-/** Stitch on Fabric: weaves resource packs' stitches into Iris's shader pack programs. */
+/** Stitch on Fabric: weaves resource packs' stitches into Iris's or LILO's shader pack programs. */
 public final class StitchMod implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
         FabricLoader loader = FabricLoader.getInstance();
         IrisShape.viewSpace(before(loader, "1.20.5"));
-        IrisWeaving.stitches(Readers.of(variant(loader)));
+        var stitches = Readers.of(variant(loader));
+        IrisWeaving.stitches(stitches);
+        LiloWeaving.stitches(stitches);
         IrisWeaving.LOG.info("Stitch {}: {}", loader.getModContainer("stitch").map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?"),
-            loader.isModLoaded("iris") ? "weaving stitches into Iris's shader pack programs" : "Iris isn't installed, so there is nothing to weave into");
+            loader.isModLoaded("iris") ? "weaving stitches into Iris's shader pack programs"
+                : loader.isModLoaded("lilo") ? "weaving stitches into LILO's shader pack programs" : "neither Iris nor LILO is installed, so there is nothing to weave into");
     }
 
     /**

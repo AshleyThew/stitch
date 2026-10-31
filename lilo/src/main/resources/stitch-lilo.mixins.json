@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "io.github.ashleythew.stitch.lilo.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "io.github.ashleythew.stitch.lilo.mixin.LiloMixinPlugin",
+  "client": ["ProgramHookMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

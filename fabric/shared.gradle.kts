@@ -1,5 +1,5 @@
 // What both Fabric builds share: the sources in fabric/src, fabric.mod.json filled in for the jar's
-// Minecraft versions, and core and the Iris weaving bundled inside it (neither touches Minecraft, so
+// Minecraft versions, and core and the Iris and LILO weaving bundled inside it (neither touches Minecraft, so
 // neither is remapped). The applying build sets, in extra: stitch.range (fabric.mod.json's Minecraft
 // version range), stitch.resources (the source folder that reads resource packs), stitch.variant (the
 // reader's package, see minecraft/variant.gradle.kts) and stitch.jar (the jar's name, without .jar).
@@ -15,6 +15,8 @@ val bundled: Configuration by configurations.creating {
 dependencies {
     "implementation"(project(":iris"))
     bundled(project(":iris"))
+    "implementation"(project(":lilo"))
+    bundled(project(":lilo"))
 }
 
 tasks.withType<JavaCompile>().configureEach {

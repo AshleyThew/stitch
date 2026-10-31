@@ -9,7 +9,7 @@
   "entrypoints": {
     "client": ["io.github.ashleythew.stitch.fabric.StitchMod"]
   },
-  "mixins": ["stitch-iris.mixins.json"],
+  "mixins": ["stitch-iris.mixins.json", "stitch-lilo.mixins.json"],
   "depends": {
     "fabricloader": ">=0.14",
     "minecraft": "${minecraft}"

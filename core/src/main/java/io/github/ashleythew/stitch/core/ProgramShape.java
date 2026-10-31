@@ -24,6 +24,8 @@ public final class ProgramShape {
     final Map<String, Uniform> uniforms = new LinkedHashMap<>();
     boolean shadow = false;
     boolean layouts = false;
+    boolean varyingsFirst = false;
+    boolean mainIsWrapper = false;
     String vertexHeader = null;
     String preamble = "";
     /** The vertex inputs a quad's corners are shared from (quad_corners), and the lines that enable it. */
@@ -105,6 +107,24 @@ public final class ProgramShape {
     /** Its varyings need explicit layout locations. */
     public ProgramShape layouts(boolean layouts) {
         this.layouts = layouts;
+        return this;
+    }
+
+    /**
+     * Its varyings are matched by their order of declaration, and the program's stages needn't declare all of theirs
+     * at the same point: the stitches' go before any of the program's, in both stages.
+     */
+    public ProgramShape varyingsFirst() {
+        this.varyingsFirst = true;
+        return this;
+    }
+
+    /**
+     * The fragment shader's main only calls the program's own, which comes before it: what the program's code calls is
+     * declared at the top, since it's defined just before main.
+     */
+    public ProgramShape mainIsWrapper() {
+        this.mainIsWrapper = true;
         return this;
     }
 
