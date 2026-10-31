@@ -1,0 +1,28 @@
+{
+  "project": {
+    "slug": "stitch-shaders",
+    "title": "Stitch",
+    "description": "Resource pack shaders that keep working under shader packs: brings a pack's armour and model effects back under Iris and OptiFine.",
+    "categories": ["utility", "library"],
+    "client_side": "required",
+    "server_side": "unsupported",
+    "project_type": "mod",
+    "license_id": "LicenseRef-PolyForm-Noncommercial-1.0.0",
+    "license_url": "https://github.com/AshleyThew/stitch/blob/main/LICENSE.md",
+    "source_url": "https://github.com/AshleyThew/stitch",
+    "issues_url": "https://github.com/AshleyThew/stitch/issues",
+    "wiki_url": "https://github.com/AshleyThew/stitch/blob/main/docs/SPEC.md"
+  },
+  "body": "description.md",
+  "icon": "icon.png",
+  "gallery": [
+    { "file": "../docs/images/hero.png", "featured": true, "title": "Five armour sets under Complementary", "description": "Five armour sets from the showcase pack under the Complementary shader pack at sunset. Every effect is a resource pack stitch." },
+    { "file": "../docs/images/compare.png", "title": "With and without Stitch", "description": "Vanilla with the effects; a shader pack without Stitch, the armour plain; a shader pack with Stitch, the effects back." },
+    { "file": "../docs/images/showcase/astral.gif", "title": "Astral", "description": "Each panel is a window onto a starfield fixed in the world. The pieces float free of the body." },
+    { "file": "../docs/images/showcase/magma.gif", "title": "Magma", "description": "Lava flows down the cracks in basalt plate, embers glow beside it, and the suit shimmers with heat." },
+    { "file": "../docs/images/showcase/glitch.gif", "title": "Glitch", "description": "Slices tear sideways, colours split, scanlines crawl and the circuits pulse." },
+    { "file": "../docs/images/showcase/seraph.gif", "title": "Seraph", "description": "Great feathered wings that beat, folded out of the chestplate's own faces." },
+    { "file": "../docs/images/showcase/phantom.gif", "title": "Phantom", "description": "Spectral mail that drifts, and burns away at glowing edges as it fades in and out." },
+    { "file": "../docs/images/showcase/player.gif", "title": "On a player", "description": "Wings, shadows and all: the stitches follow the body's pose like any armour." }
+  ]
+}
