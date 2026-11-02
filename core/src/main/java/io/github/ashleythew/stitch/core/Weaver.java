@@ -131,6 +131,14 @@ public final class Weaver {
         run.append(", ").append(shape.corner != null ? "stitch_corner_index()" : "0").append(", false);\n");
         StringBuilder texel = new StringBuilder("vec4 stitch_texel_all(vec4 texel, vec2 uv) {\n    StitchFragment f = StitchFragment(uv, ")
             .append(shape.shadow).append(", ").append(fragmentPosition ? FRAGMENT_POSITION : "vec3(0.0)").append(");\n");
+        // on a shared program, the stitches and their calls only where it draws their target: everywhere
+        // else the inputs pass through untouched and the texel as sampled
+        String open = shape.guard == null ? "" : "#if " + shape.guard + "\n";
+        String close = shape.guard == null ? "" : "#endif\n";
+        vertexCode.append(open);
+        fragmentCode.append(open);
+        run.append(open);
+        texel.append(open);
 
         for (Stitch s : use) {
             Map<String, String> names = new HashMap<>();
@@ -163,6 +171,10 @@ public final class Weaver {
             }
             applied.add(s.id());
         }
+        vertexCode.append(close);
+        fragmentCode.append(close);
+        run.append(close);
+        texel.append(close);
         for (String[] f : FIELDS) {
             run.append("    stitch_").append(f[0]).append(" = v.").append(f[0]).append(";\n");
         }
@@ -363,8 +375,13 @@ public final class Weaver {
             throw new IllegalArgumentException("the fragment shader has no main");
         }
         if (depth) {
-            // every fragment that reaches the end writes a depth: the stitch's surface, or its own
-            tokens.add(main[1], new Token(Kind.SPACE, "    gl_FragDepth = stitch_depth_set ? stitch_depth_of(stitch_depth_position) : gl_FragCoord.z;\n"));
+            // every fragment that reaches the end writes a depth: the stitch's surface, or its own. Only where
+            // the stitches are: a depth write costs early depth testing, which the rest of a shared program keeps
+            String write = "    gl_FragDepth = stitch_depth_set ? stitch_depth_of(stitch_depth_position) : gl_FragCoord.z;\n";
+            if (shape.guard != null) {
+                write = "\n#if " + shape.guard + "\n" + write + "#endif\n";
+            }
+            tokens.add(main[1], new Token(Kind.SPACE, write));
         }
         tokens.add(statementStart(tokens, main[0]), new Token(Kind.SPACE, beforeMain + "\n"));
         if (!top.isEmpty()) {

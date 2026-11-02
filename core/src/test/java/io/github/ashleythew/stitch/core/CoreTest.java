@@ -143,6 +143,34 @@ class CoreTest {
     }
 
     @Test
+    void sharedProgramKeepsTheStitchesToItsTarget() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
+                + " \"requires\": [\"texture_size\"], \"uses\": [\"fragment_depth\"]}",
+            Map.of("test:v", "const float K = 2.0;\nvoid stitch_vertex(inout StitchVertex v) { v.position *= K; }",
+                "test:f", "vec4 stitch_texel(StitchFragment f, vec4 texel) { stitch_set_depth(f.position); return texel; }"));
+        ProgramShape shape = new ProgramShape().input("position", "Position").input("uv", "UV0")
+            .albedo("Sampler0", Set.of("texture")).fragmentPosition().fragmentDepth("return 0.5;", "uniform mat4 ProjMat;")
+            .guard("defined(ARMOUR)");
+        Weaver.Woven w = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s));
+        assertEquals(List.of("test:s"), w.applied());
+        // with the define, as without a guard
+        String armour = Preprocessor.resolve("#define ARMOUR\n" + w.vertex(), Set.of());
+        assertTrue(armour.contains("const float stitch_test_s_K = 2.0;"));
+        assertTrue(armour.contains("stitch_test_s_stitch_vertex(v);"));
+        assertTrue(Preprocessor.resolve("#define ARMOUR\n" + w.fragment(), Set.of()).contains("gl_FragDepth ="));
+        // without it, neither the stitch nor a depth write: the inputs and the texel pass through
+        String vertex = Preprocessor.resolve(w.vertex(), Set.of());
+        String fragment = Preprocessor.resolve(w.fragment(), Set.of());
+        assertFalse(vertex.contains("stitch_test_s_"));
+        assertFalse(fragment.contains("stitch_test_s_"));
+        assertFalse(fragment.contains("gl_FragDepth"));
+        assertTrue(vertex.contains("stitch_position = v.position;"));
+        assertTrue(fragment.contains("return texel;"));
+        assertNotNull(Glsl.main(Glsl.tokens(vertex)));
+        assertNotNull(Glsl.main(Glsl.tokens(fragment)));
+    }
+
+    @Test
     void gameTimeInBothStagesOrStandingStill() {
         Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
                 + " \"uniforms\": [\"game_time\"]}",

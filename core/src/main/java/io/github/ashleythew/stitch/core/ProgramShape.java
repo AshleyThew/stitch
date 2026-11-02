@@ -41,6 +41,8 @@ public final class ProgramShape {
     /** The body of float stitch_depth_of(vec3 p): a point in position space to its window depth. */
     String depth = null;
     String depthDeclaration = null;
+    /** A preprocessor condition true only where the program draws the stitches' target, or null for always. */
+    String guard = null;
     final java.util.HashSet<String> capabilities = new java.util.HashSet<>();
 
     /** The program reads this StitchVertex field from that input (Position, vaPosition, gl_Vertex...). */
@@ -185,6 +187,16 @@ public final class ProgramShape {
         this.depth = body;
         this.depthDeclaration = declaration;
         capabilities.add("fragment_depth");
+        return this;
+    }
+
+    /**
+     * The program is shared with drawing outside the target (Minecraft's entity shader, which every entity
+     * draws with, each with its own defines): the stitches go in only where this preprocessor condition holds,
+     * so the rest compile as if there were none.
+     */
+    public ProgramShape guard(String condition) {
+        this.guard = condition;
         return this;
     }
 

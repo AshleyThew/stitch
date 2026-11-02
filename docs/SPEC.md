@@ -61,6 +61,12 @@ Targets name what is drawn, not a shader. Each reader maps them to the programs 
 | `text_gui` | text in a screen | `rendertype_text*` in a screen | none |
 | `glint` | enchantment glint | `rendertype_*glint*` | glint |
 
+Where Minecraft draws a target with a shader it shares with other drawing (from 1.21.2 armour is drawn with
+the entity shader, each kind of entity a program of its own defines), a reader weaves a stitch only into
+the target's own programs, and leaves the rest as if there were no stitch. For armour those are the
+programs with `ALPHA_CUTOUT` and `NO_OVERLAY` that neither move their texture (`APPLY_TEXTURE_MATRIX`)
+nor glow (`EMISSIVE`); from 26.1 also `PER_FACE_LIGHTING`, which tells armour from the end crystal's beam.
+
 **A target is coarse.** Iris draws armour, mobs and players with the same programs, and vanilla draws
 many things with one core shader. So a stitch runs on everything its target covers and **must leave
 untouched anything it doesn't recognise.** The usual way: mark the textures the stitch is for (a texel

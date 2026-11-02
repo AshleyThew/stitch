@@ -98,7 +98,7 @@ public final class Main {
                 }
                 Weaver.Woven woven;
                 try {
-                    woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"), CoreTargets.shape(g.first, g.files.get("vsh")), forTarget);
+                    woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"), CoreTargets.shape(target, g.name, g.first, g.files.get("vsh")), forTarget);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalStateException(target + " " + g.firstRelease + ": " + e.getMessage(), e);
                 }
@@ -181,7 +181,7 @@ public final class Main {
             int format = shaders.format();
             // the same text woven the same way: the shape changes at these formats
             String key = name + files + (format >= CoreTargets.MODEL_SPACE_FROM) + (format >= CoreTargets.DRAW_PARAMETERS_FROM)
-                + (format >= CoreTargets.GLOBALS_FROM);
+                + (format >= CoreTargets.GLOBALS_FROM) + CoreTargets.guard(target, name, format);
             Group last = groups.isEmpty() ? null : groups.get(groups.size() - 1);
             if (last != null && last.key.equals(key)) {
                 last.last = Math.max(last.last, format);

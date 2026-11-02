@@ -18,6 +18,23 @@ final class CoreTargets {
         // to 1.21.1 armour has its own shader; from 1.21.2 it's the entity shader every entity draws with
         "armor", List.of("rendertype_armor_cutout_no_cull", "entity"));
 
+    /**
+     * Where a target's shader is shared with drawing outside it, the defines that tell its own programs apart
+     * (Minecraft's program JSONs to 1.21.4, its render pipelines after): woven in only there, so the rest
+     * compile no faster or slower than without the stitches. The entity shader is armour's from 1.21.2, and
+     * armour's programs are the cut-out ones without an overlay that neither move their texture (breeze wind,
+     * energy swirl) nor glow (eyes).
+     */
+    static final Map<String, String> SHARED = Map.of(
+        "armor:entity", "defined(ALPHA_CUTOUT) && defined(NO_OVERLAY) && !defined(APPLY_TEXTURE_MATRIX) && !defined(EMISSIVE)");
+    /**
+     * From 26.1 (format 84) the end crystal's beam is drawn with the entity shader too, cut out without an
+     * overlay as armour is; armour alone of the two lights each face (PER_FACE_LIGHTING, which armour has had
+     * since 1.21.10).
+     */
+    static final int END_CRYSTAL_BEAM_FROM = 84;
+    static final String PER_FACE = " && defined(PER_FACE_LIGHTING)";
+
     /** Before 1.20.5 (format 32) entities are drawn in view space, IViewRotMat turning that back. */
     static final int MODEL_SPACE_FROM = 32;
     /**
@@ -40,14 +57,24 @@ final class CoreTargets {
         return SHADERS.containsKey(target);
     }
 
-    /** How the release's shader for the target is woven into. */
-    static ProgramShape shape(int format, String vertex) {
+    /** Where the target's own programs are, in the release's shader of this name: a condition, or null for all of it. */
+    static String guard(String target, String shader, int format) {
+        String guard = SHARED.get(target + ":" + shader);
+        if (guard != null && target.equals("armor") && format >= END_CRYSTAL_BEAM_FROM) {
+            guard += PER_FACE;
+        }
+        return guard;
+    }
+
+    /** How the release's shader of this name, for the target, is woven into. */
+    static ProgramShape shape(String target, String shader, int format, String vertex) {
         ProgramShape shape = new ProgramShape()
             .input("position", "Position").input("uv", "UV0").input("color", "Color").input("normal", "Normal")
             .input("light", "UV2").input("overlay", "UV1")
             .albedo("Sampler0", Set.of("texture"))
             .inScreen("(ProjMat[2][3] == 0.0)")
-            .layouts(Glsl.highestLocation(Glsl.tokens(vertex)) >= 0);
+            .layouts(Glsl.highestLocation(Glsl.tokens(vertex)) >= 0)
+            .guard(guard(target, shader, format));
         StringBuilder preamble = new StringBuilder();
         if (format >= DRAW_PARAMETERS_FROM) {
             shape.vertexHeader("#version 450\n#extension GL_ARB_shader_draw_parameters : enable\n#define STITCH_DRAW_PARAMETERS");
