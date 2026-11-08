@@ -21,7 +21,7 @@ public final class Stitch {
     public static final Set<String> TARGETS = Set.of("armor", "entity", "item_world", "item_gui", "text_world", "text_gui", "glint");
     public static final Set<String> UNIFORMS = Set.of("game_time", "screen_size");
     public static final Set<String> CAPABILITIES = Set.of("vertex_corner", "texture_size", "position_model_space", "orientation", "shadow_pass",
-        "quad_corners", "tangent", "fragment_position", "fragment_depth", "vertex_index");
+        "quad_corners", "tangent", "fragment_position", "fragment_depth", "vertex_index", "screen_position", "view_rotation", "final_color");
     public static final Set<String> PASSES = Set.of("main", "shadow");
     private static final Set<String> TYPES = Set.of("float", "vec2", "vec3", "vec4", "int", "ivec2", "ivec3", "ivec4");
     private static final Pattern ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
@@ -42,9 +42,10 @@ public final class Stitch {
     private final Set<String> uses;
     private final Set<String> passes;
     private final int order;
+    private final boolean core;
 
     private Stitch(String id, List<String> targets, String vertex, String fragment, List<Varying> varyings,
-                   Set<String> uniforms, Set<String> requires, Set<String> uses, Set<String> passes, int order) {
+                   Set<String> uniforms, Set<String> requires, Set<String> uses, Set<String> passes, int order, boolean core) {
         this.id = id;
         this.targets = targets;
         this.vertex = vertex;
@@ -55,6 +56,7 @@ public final class Stitch {
         this.uses = uses;
         this.passes = passes;
         this.order = order;
+        this.core = core;
     }
 
     /**
@@ -125,10 +127,14 @@ public final class Stitch {
         if (order != null && !(order instanceof Double)) {
             throw new StitchException(id, "order isn't a number");
         }
+        Object core = map.get("core");
+        if (core != null && !(core instanceof Boolean)) {
+            throw new StitchException(id, "core isn't true or false");
+        }
         return new Stitch(id, Collections.unmodifiableList(targets), vertex, fragment, Collections.unmodifiableList(varyings),
             Collections.unmodifiableSet(uniforms), Collections.unmodifiableSet(requires), Collections.unmodifiableSet(uses),
             Collections.unmodifiableSet(new LinkedHashSet<>(passes.isEmpty() ? List.of("main", "shadow") : passes)),
-            order == null ? 0 : ((Double) order).intValue());
+            order == null ? 0 : ((Double) order).intValue(), !Boolean.FALSE.equals(core));
     }
 
     private static List<String> strings(String id, Map<String, Object> map, String key, Set<String> allowed, boolean required) {
@@ -217,6 +223,14 @@ public final class Stitch {
 
     public int order() {
         return order;
+    }
+
+    /**
+     * Whether the stitch is woven into Minecraft's core shaders (the default). False for one only shader packs
+     * need, where the pack's own core shaders already draw what it does.
+     */
+    public boolean core() {
+        return core;
     }
 
     /** A name unique to this stitch, for its prefix: example:flared_leggings -> example_flared_leggings. */

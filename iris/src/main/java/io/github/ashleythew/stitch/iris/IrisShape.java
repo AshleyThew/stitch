@@ -13,6 +13,21 @@ public final class IrisShape {
     private static final List<String> ALBEDO = List.of("gtexture", "tex", "texture");
 
     /**
+     * A point on the screen in front of the world: shader packs draw in OpenGL's depth, nearest at -1, and a
+     * layer is drawn a little nearer than the one under it.
+     */
+    static final String SCREEN = "return vec4(p, -0.999 - 0.00002 * layer, 1.0);";
+
+    /**
+     * From Minecraft 26.2 depth runs the other way, 0 to 1 with the nearest at 1, and Iris turns the shader
+     * pack's OpenGL depth round as the last line of main, after which a stitch's position is put in: so
+     * there the point's depth is given turned round already.
+     */
+    static final String SCREEN_REVERSED = "return vec4(p, 0.9995 + 0.00001 * layer, 1.0);";
+    private static final Pattern REVERSES = Pattern.compile(
+        "gl_Position\\.z\\s*=\\s*0\\.5f?\\s*\\*\\s*\\(\\s*gl_Position\\.w\\s*-\\s*gl_Position\\.z\\s*\\)");
+
+    /**
      * Until 1.20.5 Minecraft puts the camera's rotation into each entity vertex, so positions are in view
      * space; set by the loader's mod for its Minecraft version.
      */
@@ -51,14 +66,25 @@ public final class IrisShape {
             // GLSL 330 without separate shader objects: varyings are matched by name, no layout locations
             .layouts(false)
             // shader packs' clock, in seconds: a Minecraft day is 1200 of them
-            .uniform("game_time", "fract(frameTimeCounter / 1200.0)", "frameTimeCounter", "uniform float frameTimeCounter;");
+            .uniform("game_time", "fract(frameTimeCounter / 1200.0)", "frameTimeCounter", "uniform float frameTimeCounter;")
+            // the size shader packs draw the world at
+            .uniform("screen_size", "vec2(viewWidth, viewHeight)", "viewWidth", "uniform float viewWidth;\nuniform float viewHeight;");
+        String view = shadow ? "shadowModelView" : "gbufferModelView";
+        if (!Pattern.compile("uniform\\s+mat4\\s+" + view + "\\s*;").matcher(vertex).find()) {
+            shape.preamble("uniform mat4 " + view + ";\n");
+        }
+        if (!shadow) {
+            // the camera's turn, which the shader pack is told; and the screen, which only the main pass draws
+            shape.viewRotation("mat3(gbufferModelView)").screenPosition(REVERSES.matcher(vertex).find() ? SCREEN_REVERSED : SCREEN);
+            // Iris names a program's first colour output iris_FragData0, the colour the shader pack lit: a stitch's
+            // own colour goes over it at the end of main, its other outputs (normals, materials) left as they were
+            if (Pattern.compile("out\\s+vec4\\s+iris_FragData0\\s*;").matcher(fragment).find()) {
+                shape.finalColor("iris_FragData0 = $C;", true);
+            }
+        }
         if (viewSpace) {
             // the world's up, turned by the camera that drew this pass
-            String view = shadow ? "shadowModelView" : "gbufferModelView";
             shape.orientation("normalize(" + view + "[1].xyz)", "1.0");
-            if (!Pattern.compile("uniform\\s+mat4\\s+" + view + "\\s*;").matcher(vertex).find()) {
-                shape.preamble("uniform mat4 " + view + ";\n");
-            }
         } else {
             // positions relative to the camera, along the world's axes
             shape.orientation("vec3(0.0, 1.0, 0.0)", "1.0").modelSpace();

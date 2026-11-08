@@ -16,7 +16,9 @@ final class CoreTargets {
     /** The core shaders that draw each target: per release, the first of these it has. */
     static final Map<String, List<String>> SHADERS = Map.of(
         // to 1.21.1 armour has its own shader; from 1.21.2 it's the entity shader every entity draws with
-        "armor", List.of("rendertype_armor_cutout_no_cull", "entity"));
+        "armor", List.of("rendertype_armor_cutout_no_cull", "entity"),
+        // text in the world (and maps in item frames): rendertype_text, renamed text in 26.2
+        "text_world", List.of("text", "rendertype_text"));
 
     /**
      * Where a target's shader is shared with drawing outside it, the defines that tell its own programs apart
@@ -50,6 +52,16 @@ final class CoreTargets {
 
     static final String VIEW_ROTATION = "IViewRotMat";
 
+    /**
+     * From 26.2 (format 88) depth runs the other way: far at -1 (0 in Vulkan's range) and near at 1. And the
+     * text pipelines bind the Globals block (the clock and the screen's size) from then; 1.21.2 to 26.1 give
+     * text shaders neither, and a Vulkan pipeline rejects a shader using a block it doesn't bind.
+     */
+    static final int REVERSED_DEPTH_FROM = 88;
+    static final int TEXT_GLOBALS_FROM = 88;
+    /** Where the text shaders have no screen size, the screen taken as 1080 high, as wide as the projection's shape. */
+    static final String SCREEN_GUESS = "vec2(1080.0 * ProjMat[1][1] / ProjMat[0][0], 1080.0)";
+
     private CoreTargets() {
     }
 
@@ -67,11 +79,17 @@ final class CoreTargets {
     }
 
     /** How the release's shader of this name, for the target, is woven into. */
-    static ProgramShape shape(String target, String shader, int format, String vertex) {
-        ProgramShape shape = new ProgramShape()
-            .input("position", "Position").input("uv", "UV0").input("color", "Color").input("normal", "Normal")
-            .input("light", "UV2").input("overlay", "UV1")
-            .albedo("Sampler0", Set.of("texture"))
+    static ProgramShape shape(String target, String shader, int format, String vertex, String fragment) {
+        ProgramShape shape = new ProgramShape();
+        // the inputs the shader has (text has neither a normal nor an overlay)
+        String[][] inputs = {{"position", "Position"}, {"uv", "UV0"}, {"color", "Color"}, {"normal", "Normal"},
+            {"light", "UV2"}, {"overlay", "UV1"}};
+        for (String[] in : inputs) {
+            if (declaredAlways(vertex, in[1])) {
+                shape.input(in[0], in[1]);
+            }
+        }
+        shape.albedo("Sampler0", Set.of("texture"))
             .inScreen("(ProjMat[2][3] == 0.0)")
             .layouts(Glsl.highestLocation(Glsl.tokens(vertex)) >= 0)
             .guard(guard(target, shader, format));
@@ -88,7 +106,7 @@ final class CoreTargets {
             #define STITCH_VERTEX_ID (gl_VertexIndex - gl_BaseVertexARB)
             #elif defined(VULKAN)
             #define STITCH_VERTEX_ID (-4)
-            #elif defined(GL_ARB_shader_draw_parameters)
+            #elif defined(GL_ARB_shader_draw_parameters) && (defined(STITCH_ARB_DRAW_PARAMETERS) || defined(STITCH_DRAW_PARAMETERS))
             #define STITCH_VERTEX_ID (gl_VertexID - gl_BaseVertexARB)
             #else
             #define STITCH_VERTEX_ID gl_VertexID
@@ -99,8 +117,11 @@ final class CoreTargets {
         if (format < DRAW_PARAMETERS_FROM) {
             // a quad's corners shared by subgroup shuffles, where the driver has them (26.3's Vulkan GLSL
             // is left out: there they would need a newer SPIR-V than Minecraft asks for)
+            // (the base vertex is read only where its extension is enabled, here or by 26.3's header: a driver
+            // can define GL_ARB_shader_draw_parameters in a shader that never enabled it, which can't use it)
             shape.quadCorners("Position", "UV0", "STITCH_VERTEX_ID",
-                "#extension GL_ARB_shader_draw_parameters : enable\n#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
+                "#extension GL_ARB_shader_draw_parameters : enable\n#define STITCH_ARB_DRAW_PARAMETERS\n"
+                    + "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
         }
         // What a stitch draws can sit where it says, at its depth. A point's window depth is found the
         // way this fragment's own was: OpenGL maps -1 to 1 onto 0 to 1, a Vulkan-style renderer (26.3)
@@ -134,9 +155,34 @@ final class CoreTargets {
             "(ProjMat[2][3] == 0.0 ? normalize(inverse(mat3(ModelViewMat)) * vec3(0.0, sign(ProjMat[1][1]), 0.0)) : " + worldUp + ")",
             "(ProjMat[2][3] == 0.0 ? sign(determinant(mat3(ModelViewMat))) * sign(ProjMat[0][0]) * sign(ProjMat[1][1]) : 1.0)");
         shape.preamble(preamble.toString());
+        // a point on the screen just in front of everything, each layer a little nearer
+        shape.screenPosition(format >= REVERSED_DEPTH_FROM ? "return vec4(p, 0.9999 + 0.00002 * layer, 1.0);"
+            : "return vec4(p, -0.9999 - 0.00002 * layer, 1.0);");
+        // the camera's turn: IViewRotMat undoes it before 1.20.5, where it is in the vertices
+        shape.viewRotation(format < MODEL_SPACE_FROM ? "transpose(" + VIEW_ROTATION + ")" : "mat3(ModelViewMat)");
+        // the colour as it is, past the shader's lighting and fog; 26.3 draws some text in two passes, and its
+        // alpha-only one writes no colour
+        if (fragment != null && fragment.contains("fragColor")) {
+            shape.finalColor(fragment.contains("OIT_ALPHA_ONLY")
+                ? "#ifdef OIT_ALPHA_ONLY\n            executeAlphaOnlyPhase(gl_FragCoord.z, $C.a);\n#else\n            fragColor = $C;\n#endif"
+                : "fragColor = $C;");
+        }
+        String include = vertex.contains("#include") ? "#include" : "#moj_import";
+        if (target.equals("text_world")) {
+            if (format < NO_PROGRAM_JSON_FROM) {
+                // listed in the program JSON (see programJson)
+                shape.uniform("game_time", "GameTime", "GameTime", "uniform float GameTime;");
+                shape.uniform("screen_size", "ScreenSize", "ScreenSize", "uniform vec2 ScreenSize;");
+            } else if (format >= TEXT_GLOBALS_FROM) {
+                shape.uniform("game_time", "GameTime", "GameTime", include + " <minecraft:globals.glsl>");
+                shape.uniform("screen_size", "ScreenSize", "ScreenSize", include + " <minecraft:globals.glsl>");
+            } else {
+                // no clock here, so a stitch's stands still; the screen's size from the projection
+                shape.uniform("screen_size", SCREEN_GUESS, "ProjMat", "");
+            }
+            return shape;
+        }
         if (format >= GLOBALS_FROM) {
-            // 26.3's shaders include with #include, earlier ones import with #moj_import
-            String include = vertex.contains("#include") ? "#include" : "#moj_import";
             shape.uniform("game_time", "GameTime", "GameTime", include + " <minecraft:globals.glsl>");
         } else {
             // to 1.21.1 the program JSON lists it too (see GAME_TIME_UNIFORM)
@@ -148,6 +194,35 @@ final class CoreTargets {
     /** The uniform the program JSON (to 1.21.1) must list for Minecraft to set the game time. */
     static final Map<String, Object> GAME_TIME_UNIFORM = Map.of("name", "GameTime", "type", "float", "count", 1.0,
         "values", List.of(0.0));
+
+    /**
+     * Whether the vertex shader declares this input outside every #if: from 26.2 the text shader declares its light
+     * (UV2) only for the programs that aren't drawn in a screen or through walls, so the others have none to read.
+     * One declared only sometimes is left to the shader, a stitch's change to it going nowhere.
+     */
+    static boolean declaredAlways(String vertex, String input) {
+        java.util.regex.Pattern declaration = java.util.regex.Pattern.compile("\\bin\\s+\\w+\\s+" + input + "\\s*;");
+        int depth = 0;
+        boolean found = false;
+        for (String line : vertex.split("\n")) {
+            String t = line.trim();
+            if (t.startsWith("#if")) {
+                depth++;
+            } else if (t.startsWith("#endif")) {
+                depth--;
+            } else if (declaration.matcher(t).find()) {
+                if (depth > 0) {
+                    return false;
+                }
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    /** The screen's size, which the program JSON (to 1.21.1) must list for the text shader's stitches. */
+    static final Map<String, Object> SCREEN_SIZE_UNIFORM = Map.of("name", "ScreenSize", "type", "float", "count", 2.0,
+        "values", List.of(1920.0, 1080.0));
 
     /** The uniform the program JSON (to 1.21.1) must list for what the weaving added. */
     static final Map<String, Object> VIEW_ROTATION_UNIFORM = Map.of("name", VIEW_ROTATION, "type", "matrix3x3", "count", 9.0,

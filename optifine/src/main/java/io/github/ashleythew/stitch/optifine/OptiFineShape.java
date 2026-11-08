@@ -17,6 +17,12 @@ public final class OptiFineShape {
     private static final List<String> ALBEDO = List.of("gtexture", "tex", "texture");
 
     /**
+     * A point on the screen in front of the world: shader packs draw in OpenGL's depth, nearest at -1, and a
+     * layer is drawn a little nearer than the one under it.
+     */
+    static final String SCREEN = "return vec4(p, -0.999 - 0.00002 * layer, 1.0);";
+
+    /**
      * Until 1.20.5 Minecraft puts the camera's rotation into each entity vertex, so positions are in view
      * space; set by the loader's mod for its Minecraft version.
      */
@@ -27,6 +33,39 @@ public final class OptiFineShape {
 
     public static void viewSpace(boolean value) {
         viewSpace = value;
+    }
+
+    private static final Pattern LOCATION_0 = Pattern.compile("layout\\s*\\(\\s*location\\s*=\\s*0\\s*\\)\\s*out\\s+vec4\\s+(\\w+)\\s*;");
+    private static final Pattern ANY_OUT = Pattern.compile("(?m)^\\s*out\\s+vec4\\s+(\\w+)\\s*;");
+    private static final Pattern OUT_COLOR_0 = Pattern.compile("\\bout\\s+vec4\\s+outColor0\\s*;");
+    private static final Pattern FRAG_DATA_0 = Pattern.compile("\\bgl_FragData\\s*\\[\\s*0\\s*\\]");
+    private static final Pattern FRAG_COLOR = Pattern.compile("\\bgl_FragColor\\b");
+
+    /**
+     * The fragment shader's first colour output: the vec4 at location 0, gl_FragData[0], gl_FragColor, or its only
+     * vec4 output; null where it can't be told.
+     */
+    static String colourOutput(String fragment) {
+        java.util.regex.Matcher m = LOCATION_0.matcher(fragment);
+        if (m.find()) {
+            return m.group(1);
+        }
+        // OptiFine's naming: outColorN is the Nth buffer of the program's RENDERTARGETS (or DRAWBUFFERS)
+        if (OUT_COLOR_0.matcher(fragment).find()) {
+            return "outColor0";
+        }
+        if (FRAG_DATA_0.matcher(fragment).find()) {
+            return "gl_FragData[0]";
+        }
+        if (FRAG_COLOR.matcher(fragment).find()) {
+            return "gl_FragColor";
+        }
+        m = ANY_OUT.matcher(fragment);
+        if (m.find()) {
+            String name = m.group(1);
+            return m.find() ? null : name;
+        }
+        return null;
     }
 
     static ProgramShape of(String program, String source, boolean vertex) {
@@ -51,14 +90,26 @@ public final class OptiFineShape {
             // varyings are matched by name, no layout locations
             .layouts(false)
             // shader packs' clock, in seconds: a Minecraft day is 1200 of them
-            .uniform("game_time", "fract(frameTimeCounter / 1200.0)", "frameTimeCounter", "uniform float frameTimeCounter;");
+            .uniform("game_time", "fract(frameTimeCounter / 1200.0)", "frameTimeCounter", "uniform float frameTimeCounter;")
+            // the size shader packs draw the world at
+            .uniform("screen_size", "vec2(viewWidth, viewHeight)", "viewWidth", "uniform float viewWidth;\nuniform float viewHeight;");
+        String view = shadow ? "shadowModelView" : "gbufferModelView";
+        if (vertex && !Pattern.compile("uniform\\s+mat4\\s+" + view + "\\s*;").matcher(source).find()) {
+            shape.preamble("uniform mat4 " + view + ";\n");
+        }
+        if (!shadow) {
+            // the camera's turn, which the shader pack is told; and the screen, which only the main pass draws
+            shape.viewRotation("mat3(gbufferModelView)").screenPosition(SCREEN);
+            // a stitch's own colour over the one the shader pack lit, at the end of main (its other outputs as
+            // it wrote them): written to the program's first colour output, whatever the shader pack named it
+            String colour = vertex ? null : colourOutput(source);
+            if (colour != null) {
+                shape.finalColor(colour + " = $C;", true);
+            }
+        }
         if (viewSpace) {
             // the world's up, turned by the camera that drew this pass
-            String view = shadow ? "shadowModelView" : "gbufferModelView";
             shape.orientation("normalize(" + view + "[1].xyz)", "1.0");
-            if (vertex && !Pattern.compile("uniform\\s+mat4\\s+" + view + "\\s*;").matcher(source).find()) {
-                shape.preamble("uniform mat4 " + view + ";\n");
-            }
         } else {
             shape.orientation("vec3(0.0, 1.0, 0.0)", "1.0").modelSpace();
         }

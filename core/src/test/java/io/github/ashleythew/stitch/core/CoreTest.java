@@ -106,6 +106,56 @@ class CoreTest {
         """;
 
     @Test
+    void finalColour() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"text_world\"], \"fragment\": \"test:f\", \"uses\": [\"final_color\"]}",
+            Map.of("test:f", "bool stitch_final(out vec4 color) { color = vec4(1.0); return gl_FragCoord.x > 2.0; }"));
+        ProgramShape shape = new ProgramShape().input("position", "Position").albedo("Sampler0", Set.of("texture"))
+            .finalColor("fragColor = $C;");
+        String f = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s)).fragment();
+        // claimed at the start of main, before the program samples or lights anything; no texel function to call
+        int claim = f.indexOf("if (stitch_final_all(stitch_final_color)) {");
+        assertTrue(claim > f.indexOf("void main()"));
+        assertTrue(claim < f.indexOf("texture(Sampler0"));
+        assertTrue(f.contains("fragColor = stitch_final_color;"));
+        assertTrue(f.contains("if (stitch_test_s_stitch_final(c)) {"));
+        assertFalse(f.contains("stitch_test_s_stitch_texel("));
+        // a shader pack's: at the end of main, over what the program wrote, and main goes on to its end
+        String end = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position")
+            .albedo("Sampler0", Set.of("texture")).finalColor("iris_FragData0 = $C;", true), List.of(s)).fragment();
+        assertTrue(end.indexOf("iris_FragData0 = stitch_final_color;") > end.indexOf("fragColor = stitch_texel_all("));
+        assertFalse(end.contains("return;"));
+        // a reader without it never calls the function
+        String plain = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position")
+            .albedo("Sampler0", Set.of("texture")), List.of(s)).fragment();
+        assertFalse(plain.contains("stitch_final_all"));
+    }
+
+    @Test
+    void screenPositionAndViewRotation() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"text_world\"], \"core\": false, \"vertex\": \"test:v\","
+                + " \"uses\": [\"screen_position\", \"view_rotation\"]}",
+            Map.of("test:v", "void stitch_vertex(inout StitchVertex v) {\n#ifdef STITCH_HAS_SCREEN_POSITION\n"
+                + "    stitch_set_screen_position((stitch_view_rotation() * v.position).xy, 1.0);\n#endif\n}"));
+        assertFalse(s.core());
+        assertTrue(stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\"}", Map.of("test:v", "")).core());
+        ProgramShape shape = new ProgramShape().input("position", "Position").input("uv", "UV0")
+            .screenPosition("return vec4(p, -0.999 - 0.00002 * layer, 1.0);").viewRotation("mat3(gbufferModelView)");
+        Weaver.Woven w = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s));
+        assertEquals(List.of("test:s"), w.applied());
+        // the screen's position replaces the program's at the end of main, before a hidden vertex is moved away
+        String v = w.vertex();
+        assertTrue(v.contains("#define STITCH_HAS_SCREEN_POSITION"));
+        assertTrue(v.contains("mat3 stitch_view_rotation() { return mat3(gbufferModelView); }"));
+        assertTrue(v.contains("stitch_on_screen = false;"));
+        int screen = v.indexOf("if (stitch_on_screen) {");
+        assertTrue(screen > v.indexOf("gl_Position = ProjMat"));
+        assertTrue(screen < v.indexOf("if (stitch_hidden) {"));
+        // a program that can't give it leaves the functions out, and the stitch's #ifdef with them
+        Weaver.Woven plain = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position"), List.of(s));
+        assertFalse(plain.vertex().contains("stitch_on_screen"));
+    }
+
+    @Test
     void weavesInputsAndSamples() {
         Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
                 + " \"varyings\": [{\"name\": \"tint\", \"type\": \"vec4\"}], \"requires\": [\"texture_size\"]}",

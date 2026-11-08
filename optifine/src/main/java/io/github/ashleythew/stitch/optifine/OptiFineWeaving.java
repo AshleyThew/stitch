@@ -63,9 +63,15 @@ public final class OptiFineWeaving {
     static Set<String> targets(String program) {
         Set<String> out = new LinkedHashSet<>();
         if (program.startsWith("gbuffers_entities") || program.equals("shadow") || program.startsWith("shadow_")) {
-            // armour and every other entity model share the entity programs, and every shadow is drawn by one
+            // armour and every other entity model share the entity programs, and every shadow is drawn by one;
+            // OptiFine picks a program by what is being drawn, not how, so text an entity draws (a name tag, a map
+            // in an item frame) is drawn by them too
             out.add("armor");
             out.add("entity");
+            out.add("text_world");
+        } else if (program.startsWith("gbuffers_block")) {
+            // block entities, and the text on signs
+            out.add("text_world");
         } else if (program.startsWith("gbuffers_hand")) {
             out.add("item_world");
         } else if (program.equals("gbuffers_armor_glint")) {

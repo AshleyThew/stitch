@@ -26,6 +26,9 @@ public final class Weaver {
     public record Woven(String vertex, String fragment, List<String> applied, Map<String, String> skipped) {
     }
 
+    /** A line every vertex shader Stitch weaves carries, so a reader can tell a shader was woven already. */
+    public static final String WOVEN_MARK = "// Stitch: the vertex as the stitches leave it";
+
     private static final String[][] FIELDS = {
         {"position", "vec3", "vec3(0.0)"}, {"uv", "vec2", "vec2(0.0)"}, {"color", "vec4", "vec4(1.0)"},
         {"normal", "vec3", "vec3(0.0, 1.0, 0.0)"}, {"light", "ivec2", "ivec2(240)"}, {"overlay", "ivec2", "ivec2(0, 10)"},
@@ -70,12 +73,16 @@ public final class Weaver {
             wanted.addAll(s.uses());
         });
         boolean quad = wanted.contains("quad_corners") && shape.quadPosition != null;
+        boolean screen = wanted.contains("screen_position") && shape.screen != null;
+        boolean view = wanted.contains("view_rotation") && shape.viewRotation != null;
+        boolean finalColor = wanted.contains("final_color") && shape.finalWrite != null;
+        StringBuilder finals = new StringBuilder();
         boolean depth = wanted.contains("fragment_depth") && shape.depth != null;
         // a depth is found from the fragment's own point, so it brings the fragment's position along
         boolean fragmentPosition = (wanted.contains("fragment_position") || depth) && shape.capabilities.contains("fragment_position");
         // extensions first: nothing but directives may come before them
         StringBuilder vertexTop = new StringBuilder(quad ? "\n" + shape.quadExtensions.strip() + "\n" : "");
-        vertexTop.append("\n// Stitch: the vertex as the stitches leave it\n");
+        vertexTop.append("\n").append(WOVEN_MARK).append("\n");
         vertexTop.append(STRUCTS);
         if (wanted.contains("tangent") && shape.tangentDeclaration != null) {
             vertexTop.append(shape.tangentDeclaration.strip()).append('\n');
@@ -84,6 +91,9 @@ public final class Weaver {
             vertexTop.append(f[1]).append(" stitch_").append(f[0]).append(";\n");
         }
         vertexTop.append("bool stitch_hidden;\n");
+        if (screen) {
+            vertexTop.append("bool stitch_on_screen;\nvec4 stitch_screen_position;\n");
+        }
 
         StringBuilder varyingsOut = new StringBuilder();
         StringBuilder varyingsIn = new StringBuilder();
@@ -102,6 +112,14 @@ public final class Weaver {
         vertexTop.append(declarations(shape, uniforms, vt, vertex));
         vertexCode.append(macros(shape, uniforms));
         vertexCode.append(helpers(shape, true, quad, wanted.contains("tangent")));
+        if (screen) {
+            vertexCode.append("vec4 stitch_screen_clip(vec2 p, float layer) {\n    ").append(shape.screen.strip()).append("\n}\n")
+                .append("void stitch_set_screen_position(vec2 p, float layer) {\n")
+                .append("    stitch_screen_position = stitch_screen_clip(p, layer);\n    stitch_on_screen = true;\n}\n");
+        }
+        if (view) {
+            vertexCode.append("mat3 stitch_view_rotation() { return ").append(shape.viewRotation).append("; }\n");
+        }
         String fragmentTop = declarations(shape, uniforms, ft, fragment);
         if (depth && shape.depthDeclaration != null) {
             for (String line : shape.depthDeclaration.strip().split("\n")) {
@@ -129,6 +147,9 @@ public final class Weaver {
             run.append(i > 0 ? ", " : "").append(name != null ? FIELDS[i][1] + "(" + name + ")" : FIELDS[i][2]);
         }
         run.append(", ").append(shape.corner != null ? "stitch_corner_index()" : "0").append(", false);\n");
+        if (screen) {
+            run.append("    stitch_on_screen = false;\n");
+        }
         StringBuilder texel = new StringBuilder("vec4 stitch_texel_all(vec4 texel, vec2 uv) {\n    StitchFragment f = StitchFragment(uv, ")
             .append(shape.shadow).append(", ").append(fragmentPosition ? FRAGMENT_POSITION : "vec3(0.0)").append(");\n");
         // on a shared program, the stitches and their calls only where it draws their target: everywhere
@@ -162,12 +183,19 @@ public final class Weaver {
             if (s.fragment() != null) {
                 List<Token> st = Glsl.tokens(s.fragment());
                 Map<String, String> fnames = new HashMap<>(names);
+                Set<String> own = new java.util.HashSet<>();
                 for (String n : Glsl.declared(st)) {
+                    own.add(n);
                     fnames.putIfAbsent(n, p + n);
                 }
                 Glsl.rename(st, fnames);
                 fragmentCode.append("// ").append(s.id()).append('\n').append(Glsl.join(st)).append('\n');
-                texel.append("    texel = ").append(p).append("stitch_texel(f, texel);\n");
+                if (own.contains("stitch_texel")) {
+                    texel.append("    texel = ").append(p).append("stitch_texel(f, texel);\n");
+                }
+                if (finalColor && own.contains("stitch_final")) {
+                    finals.append("    if (").append(p).append("stitch_final(c)) {\n        return true;\n    }\n");
+                }
             }
             applied.add(s.id());
         }
@@ -186,13 +214,22 @@ public final class Weaver {
         texel.append("    return texel;\n}\n");
         vertexCode.append(run);
         fragmentCode.append(texel);
+        // the first stitch to claim a fragment draws it in its own colour, before the program does anything
+        String finalCall = null;
+        if (finals.length() > 0) {
+            fragmentCode.append("bool stitch_final_all(out vec4 c) {\n").append(open).append(finals).append(close)
+                .append("    c = vec4(0.0);\n    return false;\n}\n");
+            finalCall = "\n    {\n        vec4 stitch_final_color;\n        if (stitch_final_all(stitch_final_color)) {\n"
+                + shape.finalWrite.strip().replace("$C", "stitch_final_color")
+                + (shape.finalAtEnd ? "\n        }\n    }\n" : "\n            return;\n        }\n    }");
+        }
 
         String vertexFirst = shape.varyingsFirst ? varyingsOut.toString() : "";
         String fragmentFirst = shape.varyingsFirst ? varyingsIn.toString() : "";
         String wovenVertex = vertex == null ? null : weaveVertex(vt, shape, vertexTop + vertexFirst,
-            (shape.varyingsFirst ? "" : varyingsOut) + vertexCode.toString());
+            (shape.varyingsFirst ? "" : varyingsOut) + vertexCode.toString(), screen);
         String wovenFragment = fragment == null ? null : weaveFragment(ft, shape, fragmentTop + fragmentFirst,
-            (shape.varyingsFirst ? "" : varyingsIn) + fragmentCode.toString(), depth);
+            (shape.varyingsFirst ? "" : varyingsIn) + fragmentCode.toString(), depth, finalCall, shape.finalAtEnd);
         return new Woven(wovenVertex, wovenFragment, applied, skipped);
     }
 
@@ -315,7 +352,7 @@ public final class Weaver {
         return out.toString();
     }
 
-    private static String weaveVertex(List<Token> tokens, ProgramShape shape, String top, String beforeMain) {
+    private static String weaveVertex(List<Token> tokens, ProgramShape shape, String top, String beforeMain, boolean screen) {
         // every read of an input, outside its declaration, reads the stitched global instead
         Map<String, String> reads = new HashMap<>();
         for (Map.Entry<String, String> e : shape.inputs.entrySet()) {
@@ -346,7 +383,12 @@ public final class Weaver {
             }
         }
         // the end of main first (its indexes come after the others)
-        tokens.add(main[1], new Token(Kind.SPACE, "    if (stitch_hidden) {\n        gl_Position = vec4(-2.0, -2.0, -2.0, 1.0);\n    }\n"));
+        String end = "    if (stitch_hidden) {\n        gl_Position = vec4(-2.0, -2.0, -2.0, 1.0);\n    }\n";
+        if (screen) {
+            // a vertex a stitch put on the screen goes there, whatever the program did with it
+            end = "    if (stitch_on_screen) {\n        gl_Position = stitch_screen_position;\n    }\n" + end;
+        }
+        tokens.add(main[1], new Token(Kind.SPACE, end));
         tokens.add(main[0] + 1, new Token(Kind.SPACE, "\n    stitch_run();"));
         int mainStatement = statementStart(tokens, main[0]);
         tokens.add(mainStatement, new Token(Kind.SPACE, beforeMain + "\n"));
@@ -358,7 +400,8 @@ public final class Weaver {
         return out;
     }
 
-    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain, boolean depth) {
+    private static String weaveFragment(List<Token> tokens, ProgramShape shape, String top, String beforeMain, boolean depth,
+                                        String finalCall, boolean finalAtEnd) {
         List<Glsl.Call> calls = Glsl.calls(tokens, shape.textureFunctions, shape.sampler);
         if (shape.mainIsWrapper) {
             top += "vec4 stitch_texel_all(vec4 texel, vec2 uv);\n";
@@ -382,6 +425,10 @@ public final class Weaver {
                 write = "\n#if " + shape.guard + "\n" + write + "#endif\n";
             }
             tokens.add(main[1], new Token(Kind.SPACE, write));
+        }
+        if (finalCall != null) {
+            // at the end: main[1] is its closing brace, before which the depth (above) went first
+            tokens.add(finalAtEnd ? main[1] : main[0] + 1, new Token(Kind.SPACE, finalCall));
         }
         tokens.add(statementStart(tokens, main[0]), new Token(Kind.SPACE, beforeMain + "\n"));
         if (!top.isEmpty()) {

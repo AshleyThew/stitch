@@ -41,6 +41,14 @@ public final class ProgramShape {
     /** The body of float stitch_depth_of(vec3 p): a point in position space to its window depth. */
     String depth = null;
     String depthDeclaration = null;
+    /** The body of vec4 stitch_screen_clip(vec2 p, float layer): a point on the screen to its clip position. */
+    String screen = null;
+    /** A GLSL expression for the rotation from the world's axes to the view's (view_rotation). */
+    String viewRotation = null;
+    /** Statements writing $C, a vec4, as the fragment's colour, as it is (final_color). */
+    String finalWrite = null;
+    /** Whether the final colour is written at the end of main, over what the program wrote, not at its start. */
+    boolean finalAtEnd = false;
     /** A preprocessor condition true only where the program draws the stitches' target, or null for always. */
     String guard = null;
     final java.util.HashSet<String> capabilities = new java.util.HashSet<>();
@@ -187,6 +195,43 @@ public final class ProgramShape {
         this.depth = body;
         this.depthDeclaration = declaration;
         capabilities.add("fragment_depth");
+        return this;
+    }
+
+    /**
+     * A stitch may put a vertex at a point on the screen, in front of the world (screen_position): the body
+     * of a function from p (-1 to 1 across and up the screen) and a layer (higher in front) to the vertex's
+     * clip position, which replaces the program's own at the end of its main.
+     */
+    public ProgramShape screenPosition(String body) {
+        this.screen = body;
+        capabilities.add("screen_position");
+        return this;
+    }
+
+    /**
+     * A stitch may draw a fragment in a colour of its own, as it is: no lighting, tint or fog (final_color).
+     * The statements write $C (a vec4) as the fragment's colour; main returns after them.
+     */
+    public ProgramShape finalColor(String write) {
+        return finalColor(write, false);
+    }
+
+    /**
+     * As {@link #finalColor(String)}, written at the end of main instead (atEnd): over the colour the program lit,
+     * its other outputs as it wrote them, for a renderer whose later passes read those (a shader pack).
+     */
+    public ProgramShape finalColor(String write, boolean atEnd) {
+        this.finalWrite = write;
+        this.finalAtEnd = atEnd;
+        capabilities.add("final_color");
+        return this;
+    }
+
+    /** A GLSL expression for the mat3 turning the world's axes to the view's (view_rotation). */
+    public ProgramShape viewRotation(String expression) {
+        this.viewRotation = expression;
+        capabilities.add("view_rotation");
         return this;
     }
 

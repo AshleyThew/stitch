@@ -82,6 +82,8 @@ public final class Main {
             }
         }
         List<Map<String, Object>> entries = new ArrayList<>();
+        // a stitch only shader packs need stays out: the pack's own core shaders draw what it does
+        stitches = stitches.stream().filter(Stitch::core).toList();
         List<String> targets = stitches.stream().flatMap(s -> s.targets().stream()).distinct().sorted().toList();
         for (String target : targets) {
             if (!CoreTargets.supported(target)) {
@@ -90,7 +92,7 @@ public final class Main {
                 continue;
             }
             List<Stitch> forTarget = Weaver.forTarget(stitches, target);
-            List<Group> groups = groups(minecraft, releases, target);
+            List<Group> groups = groups(minecraft, releases, target, pack);
             for (int i = 0; i < groups.size(); i++) {
                 Group g = groups.get(i);
                 if (i + 1 < groups.size()) {
@@ -98,7 +100,8 @@ public final class Main {
                 }
                 Weaver.Woven woven;
                 try {
-                    woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"), CoreTargets.shape(target, g.name, g.first, g.files.get("vsh")), forTarget);
+                    woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"),
+                        CoreTargets.shape(target, g.name, g.first, g.files.get("vsh"), g.files.get("fsh")), forTarget);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalStateException(target + " " + g.firstRelease + ": " + e.getMessage(), e);
                 }
@@ -110,14 +113,14 @@ public final class Main {
                 files.put(g.name + ".vsh", woven.vertex());
                 files.put(g.name + ".fsh", woven.fragment());
                 if (g.files.get("json") != null) {
-                    files.put(g.name + ".json", programJson(g.files.get("json"), g.first));
+                    files.put(g.name + ".json", programJson(g.files.get("json"), g.first, target));
                 }
                 // a program of an older shader name that this release still has, its JSON pointing at the
                 // shader woven here (1.21.2 to 1.21.4): its own copy, so the base folder's older one
                 // never reaches it, with the uniforms the weaving reads
                 for (Map.Entry<String, String> e : g.files.entrySet()) {
                     if (e.getKey().startsWith("program:") && e.getValue() != null) {
-                        files.put(e.getKey().substring("program:".length()), programJson(e.getValue(), g.first));
+                        files.put(e.getKey().substring("program:".length()), programJson(e.getValue(), g.first, target));
                     }
                 }
                 boolean isBase = i == 0 && base;
@@ -155,8 +158,9 @@ public final class Main {
         String key;
     }
 
-    private static List<Group> groups(Minecraft minecraft, List<Minecraft.Release> releases, String target) throws IOException {
+    private static List<Group> groups(Minecraft minecraft, List<Minecraft.Release> releases, String target, Path pack) throws IOException {
         List<Group> groups = new ArrayList<>();
+        List<Map<String, Object>> overlays = packOverlays(pack);
         for (Minecraft.Release r : releases) {
             Minecraft.Shaders shaders = minecraft.shaders(r);
             String name = null;
@@ -170,9 +174,12 @@ public final class Main {
                 continue;
             }
             Map<String, String> files = new LinkedHashMap<>();
-            files.put("vsh", minecraft.shader(r, name + ".vsh"));
-            files.put("fsh", minecraft.shader(r, name + ".fsh"));
-            files.put("json", minecraft.shader(r, name + ".json"));
+            int releaseFormat = shaders.format();
+            for (String ext : List.of("vsh", "fsh", "json")) {
+                // the pack's own shader where it has one for this release (its effects kept), else Minecraft's
+                String own = packShader(pack, overlays, releaseFormat, name + "." + ext);
+                files.put(ext, own != null ? own : minecraft.shader(r, name + "." + ext));
+            }
             for (String other : CoreTargets.SHADERS.get(target)) {
                 if (!other.equals(name) && shaders.names().contains(other + ".json")) {
                     files.put("program:" + other + ".json", minecraft.shader(r, other + ".json"));
@@ -199,15 +206,96 @@ public final class Main {
         return groups;
     }
 
+    /** The pack's overlay entries, in order, leaving out the ones this compiler wrote. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> packOverlays(Path pack) throws IOException {
+        Path meta = pack.resolve("pack.mcmeta");
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (!Files.exists(meta)) {
+            return out;
+        }
+        Map<String, Object> parsed = (Map<String, Object>) Json.parse(Files.readString(meta, StandardCharsets.UTF_8).replace("\uFEFF", ""));
+        Object overlays = parsed.get("overlays");
+        if (overlays instanceof Map<?, ?> o && o.get("entries") instanceof List<?> entries) {
+            for (Object e : entries) {
+                if (e instanceof Map<?, ?> m && m.get("directory") instanceof String d && !d.startsWith(PREFIX)) {
+                    out.add((Map<String, Object>) m);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A format bound of an overlay entry: a number, or [major, minor] from 1.21.9. */
+    private static int formatOf(Object value) {
+        if (value instanceof Double d) {
+            return d.intValue();
+        }
+        if (value instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Double d) {
+            return d.intValue();
+        }
+        return -1;
+    }
+
+    /** Whether an overlay entry applies to a pack format. */
+    private static boolean covers(Map<String, Object> entry, int format) {
+        Object formats = entry.get("formats");
+        int min = -1;
+        int max = -1;
+        if (formats instanceof Double d) {
+            min = max = d.intValue();
+        } else if (formats instanceof List<?> list && list.size() == 2) {
+            min = formatOf(list.get(0));
+            max = formatOf(list.get(1));
+        } else if (formats instanceof Map<?, ?> m) {
+            min = formatOf(m.get("min_inclusive"));
+            max = formatOf(m.get("max_inclusive"));
+        } else {
+            min = formatOf(entry.get("min_format"));
+            max = formatOf(entry.get("max_format"));
+        }
+        return min >= 0 && min <= format && format <= max;
+    }
+
+    /**
+     * The pack's own core shader file for a pack format, as the game would read it (the last overlay that
+     * covers the format and has the file, else the base folder), or null where it has none. A file this
+     * compiler wove before is refused: weaving it again would weave the stitches in twice.
+     */
+    private static String packShader(Path pack, List<Map<String, Object>> overlays, int format, String file) throws IOException {
+        Path found = null;
+        for (Map<String, Object> entry : overlays) {
+            Path p = pack.resolve((String) entry.get("directory")).resolve("assets/minecraft/shaders/core").resolve(file);
+            if (covers(entry, format) && Files.exists(p)) {
+                found = p;
+            }
+        }
+        if (found == null) {
+            Path p = pack.resolve("assets/minecraft/shaders/core").resolve(file);
+            found = Files.exists(p) ? p : null;
+        }
+        if (found == null) {
+            return null;
+        }
+        String text = Files.readString(found, StandardCharsets.UTF_8);
+        if (text.contains(Weaver.WOVEN_MARK)) {
+            fail(pack.relativize(found) + " was woven by Stitch already; build the pack's own shaders again first");
+        }
+        return text;
+    }
+
     /** The program JSON (to 1.21.1) with the uniforms the weaving uses added. */
     @SuppressWarnings("unchecked")
-    private static String programJson(String json, int format) {
+    private static String programJson(String json, int format, String target) {
         Map<String, Object> program = (Map<String, Object>) Json.parse(json);
         List<Object> uniforms = (List<Object>) program.computeIfAbsent("uniforms", k -> new ArrayList<>());
         if (format < CoreTargets.MODEL_SPACE_FROM) {
             addUniform(uniforms, CoreTargets.VIEW_ROTATION_UNIFORM);
         }
         addUniform(uniforms, CoreTargets.GAME_TIME_UNIFORM);
+        if (target.equals("text_world")) {
+            addUniform(uniforms, CoreTargets.SCREEN_SIZE_UNIFORM);
+        }
         return Json.write(program, "    ") + "\n";
     }
 

@@ -115,7 +115,8 @@ written for (usually a marker texel in its texture) and leaves everything else a
 ```
 
 It fetches each Minecraft release's shaders from Mojang, weaves the stitches in, and writes them into the
-pack as overlays, with their `pack.mcmeta` entries. A stitch that can't be woven fails the build.
+pack as overlays, with their `pack.mcmeta` entries. A stitch that can't be woven fails the build. Where the
+pack has its own core shader for a target, the stitches are woven into that one, so its own changes stay.
 
 <details>
 <summary><b>Action inputs, and a <code>pack.mcmeta</code> that loads everywhere</b></summary>
