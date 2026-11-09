@@ -34,7 +34,8 @@ pack's effects vanish.
 
 Stitch fixes that. A pack describes each effect as a **stitch**, a small GLSL function against a fixed
 interface. Stitch weaves the same stitch into Minecraft's core shaders for every release when the pack
-is built, and into the shader pack's programs when the game loads them.
+is built, and into the shader pack's programs when the game loads them. Armour, items in the world, and text
+in the world (signs, and maps in item frames) can all carry stitches.
 
 ## The showcase pack
 
@@ -105,6 +106,15 @@ vec4 stitch_texel(StitchFragment f, vec4 texel) {
 A target like `armor` covers everything of its kind, so a stitch checks it is looking at what it was
 written for (usually a marker texel in its texture) and leaves everything else alone.
 
+| Target | What it draws | Built into core shaders | Under shader packs |
+|---|---|---|---|
+| `armor` | worn armour | yes | yes |
+| `item_world` | items in a hand, on the ground, in item frames, on armour stands | yes | yes |
+| `text_world` | text in the world: signs, name tags, maps in item frames | yes | yes |
+| `entity`, `glint` | entity models, enchantment glint | not yet (the build warns and leaves it out) | yes |
+
+The [specification](docs/SPEC.md#targets) has every target and which programs each one reaches.
+
 **2. Build it into the pack** with Stitch's GitHub Action:
 
 ```yaml
@@ -166,6 +176,7 @@ The mod needs nothing from the server, and does nothing without a shader pack.
 | 🧱 **Every release** | Compiled into vanilla core shader overlays for every release from 1.18.2 to 26.3, version differences handled for you |
 | 🌄 **Under shader packs** | Woven into Iris's and OptiFine's programs as they load, shadow pass included, so shapes cast matching shadows |
 | 🔺 **Shapes, not only colours** | Move or hide vertices: flared skirts, floating plates, wings made from a chestplate's own faces |
+| 🗺️ **On the screen** | `screen_position` puts a vertex on the screen in front of the world, `view_rotation` gives the camera's turn and `final_color` draws a fragment unlit: a map in an item frame can be a minimap in the corner, under shader packs too |
 | ⏱️ **Animation** | `game_time` in both functions, from Minecraft's clock or the shader pack's |
 | 🧩 **Packs side by side** | Each stitch's names are kept private, so stitches from different packs never collide |
 | 🛡️ **Fails safe** | A stitch a program can't take is left out of that program alone, with a log line saying why; the shader pack still loads |

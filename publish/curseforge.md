@@ -8,7 +8,7 @@ CurseForge projects are made on its site, not through its API. At https://author
 | Game | Minecraft |
 | Project type (class) | Mods |
 | Name | Stitch |
-| Summary | Resource pack shaders that keep working under shader packs: brings a pack's armour and model effects back under Iris and OptiFine. |
+| Summary | Resource pack shaders that keep working under shader packs: brings a pack's armour, item and map effects back under Iris and OptiFine. |
 | Main category | API and Library |
 | Additional categories | Cosmetic, Utility & QoL |
 | Logo | `publish/icon.png` (512 x 512) |
@@ -24,11 +24,8 @@ Once it exists, in the project's settings:
 | Wiki | https://github.com/AshleyThew/stitch/blob/main/docs/SPEC.md |
 | Images | `docs/images/hero.png`, `docs/images/compare.png`, and `docs/images/showcase/*.gif` |
 
-Files go up through deploy-bot (`Documents\Projects\deploy-bot`, the plugin release pipeline): put the
-project id (About Project on its page) in `deploy.config.json` under `plugins.stitch.curseforge.projectId`,
-then `node deploy.mjs --plugin stitch --targets curseforge ...` (`--force` for the very first file, as an
-empty project's files page reads as unknown). Each file is tagged Fabric, Forge, Client and every
+Files are uploaded with the project id (About Project on its page); the very first file needs forcing, as an
+empty project's files page reads as unknown. Each file is tagged Fabric, Forge, Client and every
 Minecraft release from 1.18.2, with Iris as an optional dependency, as a beta.
 
-The Modrinth project (`modrinth-project.json`, created with deploy-bot's `create-modrinth-project.mjs`)
-is `stitch-shaders`: the `stitch` slug was taken by a project that isn't public.
+The Modrinth project (`modrinth-project.json`) is `stitch-shaders`: the `stitch` slug was taken by a project that isn't public.

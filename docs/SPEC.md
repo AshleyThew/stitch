@@ -62,6 +62,10 @@ Targets name what is drawn, not a shader. Each reader maps them to the programs 
 | `text_gui` | text in a screen | `rendertype_text*` in a screen | none |
 | `glint` | enchantment glint | `rendertype_*glint*` | glint |
 
+The compiler (and the Action) builds `armor`, `item_world` and `text_world` into Minecraft's core shaders. For
+any other target it prints a warning and leaves the stitch out of the core shaders (`--strict`, the Action's
+default, then fails the build); the mod still weaves `entity` and `glint` stitches into shader packs' programs.
+
 OptiFine picks a program by what is being drawn rather than how: its entity programs (and `shadow`) draw text an
 entity draws, such as a name tag or a map in an item frame, and `gbuffers_block` draws the text on signs, so
 `text_world` stitches go into those, beside `armor` and `entity` ones.

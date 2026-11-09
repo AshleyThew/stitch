@@ -32,6 +32,8 @@ Put the jar in your `mods` folder, beside your shader mod:
   pack's own lighting.
 - **Shapes too:** packs can move or hide parts of a model (flared skirts, floating plates, wings made
   from a chestplate), with shadows that match.
+- **More than armour:** items in the world (in hands, item frames and on armour stands) and text in the
+  world, such as a pack's minimap drawn from maps in item frames, keep their effects too.
 - **Safe to leave on:** an effect a shader pack can't take is skipped for that program alone, with a log
   line saying why. The shader pack always loads.
 
