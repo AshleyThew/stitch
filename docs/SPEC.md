@@ -72,6 +72,10 @@ the target's own programs, and leaves the rest as if there were no stitch. For a
 programs with `ALPHA_CUTOUT` and `NO_OVERLAY` that neither move their texture (`APPLY_TEXTURE_MATRIX`)
 nor glow (`EMISSIVE`); from 26.1 also `PER_FACE_LIGHTING`, which tells armour from the end crystal's beam.
 
+Where a release draws a target with more than one core shader (items to 1.21.1: one on an entity, in a frame or
+on the ground with `rendertype_entity_translucent_cull`, a translucent one under Fabulous graphics with
+`rendertype_item_entity_translucent_cull`), the stitches go into each.
+
 Where the pack has its own core shader for a target (a release's, through its overlays, or its base folder's),
 the compiler weaves the stitches into that one rather than Minecraft's, so the pack's own changes stay. One the
 compiler wove already is refused: the pack's own must be built again first, or the stitches would go in twice.

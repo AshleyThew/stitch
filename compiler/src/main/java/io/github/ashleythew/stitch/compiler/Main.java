@@ -92,55 +92,61 @@ public final class Main {
                 continue;
             }
             List<Stitch> forTarget = Weaver.forTarget(stitches, target);
-            List<Group> groups = groups(minecraft, releases, target, pack);
-            for (int i = 0; i < groups.size(); i++) {
-                Group g = groups.get(i);
-                if (i + 1 < groups.size()) {
-                    g.last = Math.max(g.last, groups.get(i + 1).first - 1);
-                }
-                Weaver.Woven woven;
-                try {
-                    woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"),
-                        CoreTargets.shape(target, g.name, g.first, g.files.get("vsh"), g.files.get("fsh")), forTarget);
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalStateException(target + " " + g.firstRelease + ": " + e.getMessage(), e);
-                }
-                for (Map.Entry<String, String> skip : woven.skipped().entrySet()) {
-                    System.out.println("WARNING: " + skip.getKey() + " left out of " + target + " " + g.firstRelease + ": " + skip.getValue());
-                    warnings++;
-                }
-                Map<String, String> files = new LinkedHashMap<>();
-                files.put(g.name + ".vsh", woven.vertex());
-                files.put(g.name + ".fsh", woven.fragment());
-                if (g.files.get("json") != null) {
-                    files.put(g.name + ".json", programJson(g.files.get("json"), g.first, target));
-                }
-                // a program of an older shader name that this release still has, its JSON pointing at the
-                // shader woven here (1.21.2 to 1.21.4): its own copy, so the base folder's older one
-                // never reaches it, with the uniforms the weaving reads
-                for (Map.Entry<String, String> e : g.files.entrySet()) {
-                    if (e.getKey().startsWith("program:") && e.getValue() != null) {
-                        files.put(e.getKey().substring("program:".length()), programJson(e.getValue(), g.first, target));
+            List<List<String>> chains = CoreTargets.SHADERS.get(target);
+            for (int c = 0; c < chains.size(); c++) {
+                List<String> chain = chains.get(c);
+                // a target's second shader and on have overlays of their own, by that shader's name
+                String label = c == 0 ? target : target + "_" + chain.get(chain.size() - 1);
+                List<Group> groups = groups(minecraft, releases, target, chain, pack);
+                for (int i = 0; i < groups.size(); i++) {
+                    Group g = groups.get(i);
+                    if (i + 1 < groups.size()) {
+                        g.last = Math.max(g.last, groups.get(i + 1).first - 1);
                     }
-                }
-                boolean isBase = i == 0 && base;
-                String directory = isBase ? null : PREFIX + target + "_" + g.firstRelease.replace('.', '_');
-                Path core = (isBase ? output : output.resolve(directory)).resolve("assets/minecraft/shaders/core");
-                Files.createDirectories(core);
-                for (Map.Entry<String, String> f : files.entrySet()) {
-                    Files.writeString(core.resolve(f.getKey()), f.getValue(), StandardCharsets.UTF_8);
-                }
-                String span = target + " " + g.firstRelease + ", formats " + g.first + "-" + g.last + ": " + woven.applied();
-                if (isBase) {
-                    System.out.println("base folder: " + span);
-                } else {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("formats", Map.of("min_inclusive", (double) g.first, "max_inclusive", (double) g.last));
-                    entry.put("min_format", (double) g.first);
-                    entry.put("max_format", (double) g.last);
-                    entry.put("directory", directory);
-                    entries.add(entry);
-                    System.out.println("overlay " + directory + ": " + span);
+                    Weaver.Woven woven;
+                    try {
+                        woven = Weaver.weave(g.files.get("vsh"), g.files.get("fsh"),
+                            CoreTargets.shape(target, g.name, g.first, g.files.get("vsh"), g.files.get("fsh")), forTarget);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalStateException(target + " " + g.firstRelease + ": " + e.getMessage(), e);
+                    }
+                    for (Map.Entry<String, String> skip : woven.skipped().entrySet()) {
+                        System.out.println("WARNING: " + skip.getKey() + " left out of " + target + " " + g.firstRelease + ": " + skip.getValue());
+                        warnings++;
+                    }
+                    Map<String, String> files = new LinkedHashMap<>();
+                    files.put(g.name + ".vsh", woven.vertex());
+                    files.put(g.name + ".fsh", woven.fragment());
+                    if (g.files.get("json") != null) {
+                        files.put(g.name + ".json", programJson(g.files.get("json"), g.first, target));
+                    }
+                    // a program of an older shader name that this release still has, its JSON pointing at the
+                    // shader woven here (1.21.2 to 1.21.4): its own copy, so the base folder's older one
+                    // never reaches it, with the uniforms the weaving reads
+                    for (Map.Entry<String, String> e : g.files.entrySet()) {
+                        if (e.getKey().startsWith("program:") && e.getValue() != null) {
+                            files.put(e.getKey().substring("program:".length()), programJson(e.getValue(), g.first, target));
+                        }
+                    }
+                    boolean isBase = i == 0 && base;
+                    String directory = isBase ? null : PREFIX + label + "_" + g.firstRelease.replace('.', '_');
+                    Path core = (isBase ? output : output.resolve(directory)).resolve("assets/minecraft/shaders/core");
+                    Files.createDirectories(core);
+                    for (Map.Entry<String, String> f : files.entrySet()) {
+                        Files.writeString(core.resolve(f.getKey()), f.getValue(), StandardCharsets.UTF_8);
+                    }
+                    String span = target + " " + g.firstRelease + ", formats " + g.first + "-" + g.last + ": " + woven.applied();
+                    if (isBase) {
+                        System.out.println("base folder: " + span);
+                    } else {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("formats", Map.of("min_inclusive", (double) g.first, "max_inclusive", (double) g.last));
+                        entry.put("min_format", (double) g.first);
+                        entry.put("max_format", (double) g.last);
+                        entry.put("directory", directory);
+                        entries.add(entry);
+                        System.out.println("overlay " + directory + ": " + span);
+                    }
                 }
             }
         }
@@ -158,13 +164,13 @@ public final class Main {
         String key;
     }
 
-    private static List<Group> groups(Minecraft minecraft, List<Minecraft.Release> releases, String target, Path pack) throws IOException {
+    private static List<Group> groups(Minecraft minecraft, List<Minecraft.Release> releases, String target, List<String> chain, Path pack) throws IOException {
         List<Group> groups = new ArrayList<>();
         List<Map<String, Object>> overlays = packOverlays(pack);
         for (Minecraft.Release r : releases) {
             Minecraft.Shaders shaders = minecraft.shaders(r);
             String name = null;
-            for (String candidate : CoreTargets.SHADERS.get(target)) {
+            for (String candidate : chain) {
                 if (shaders.names().contains(candidate + ".vsh")) {
                     name = candidate;
                     break;
@@ -180,7 +186,7 @@ public final class Main {
                 String own = packShader(pack, overlays, releaseFormat, name + "." + ext);
                 files.put(ext, own != null ? own : minecraft.shader(r, name + "." + ext));
             }
-            for (String other : CoreTargets.SHADERS.get(target)) {
+            for (String other : chain) {
                 if (!other.equals(name) && shaders.names().contains(other + ".json")) {
                     files.put("program:" + other + ".json", minecraft.shader(r, other + ".json"));
                 }

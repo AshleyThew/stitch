@@ -13,12 +13,20 @@ import java.util.Set;
  */
 final class CoreTargets {
 
-    /** The core shaders that draw each target: per release, the first of these it has. */
-    static final Map<String, List<String>> SHADERS = Map.of(
+    /**
+     * The core shaders that draw each target: per release, the first of each list it has. A target drawn by
+     * more than one shader at once in some releases lists each.
+     */
+    static final Map<String, List<List<String>>> SHADERS = Map.of(
         // to 1.21.1 armour has its own shader; from 1.21.2 it's the entity shader every entity draws with
-        "armor", List.of("rendertype_armor_cutout_no_cull", "entity"),
+        "armor", List.of(List.of("rendertype_armor_cutout_no_cull", "entity")),
         // text in the world (and maps in item frames): rendertype_text, renamed text in 26.2
-        "text_world", List.of("text", "rendertype_text"));
+        "text_world", List.of(List.of("text", "rendertype_text")),
+        // items in the world: to 1.21.1 most with rendertype_entity_translucent_cull (an item on an entity, in a
+        // frame, on the ground) and the rest (Fabulous graphics' translucent ones) with
+        // rendertype_item_entity_translucent_cull, every one with that from 1.21.2, renamed item in 26.1
+        "item_world", List.of(List.of("item", "rendertype_item_entity_translucent_cull"),
+            List.of("rendertype_entity_translucent_cull")));
 
     /**
      * Where a target's shader is shared with drawing outside it, the defines that tell its own programs apart
