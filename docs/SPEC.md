@@ -152,6 +152,7 @@ reconstruction) gets the function on each sample.
 | `stitch_set_screen_position(vec2 p, float layer)` | `screen_position` | Draw this vertex at `p` on the screen (-1 to 1, left to right and bottom to top) in front of the world, a higher `layer` in front of a lower one, whatever its `position` says. For things that belong to the screen but are drawn in the world (a map in an item frame the server keeps beside the player). Vertex only |
 | `bool stitch_final(out vec4 color)` | `final_color` | Not called, but defined by the stitch: returning true draws the fragment in `color`, with no lighting, tint or fog (the first stitch to claim a fragment draws it). For what belongs to the screen but is drawn in the world. Fragment only |
 | `stitch_view_rotation()` | `view_rotation` | The `mat3` turning the world's axes to the camera's: `transpose(stitch_view_rotation()) * vec3(1.0, 0.0, 0.0)` is the camera's right in the world. Vertex only |
+| `stitch_eye_position()` | `eye_position` | Where the eye is, in `position`'s space: the point every view ray passes through. Not always the space's origin: Minecraft's view bobbing moves the eye in the projection. In both functions |
 | varyings | listed in `varyings` | Read and write by name, in both functions |
 
 A uniform a reader has no source for still compiles: `stitch_game_time` reads 0 (the stitch applies,
@@ -177,6 +178,7 @@ per stitch, so two packs can both have a `tint`.
 | `fragment_depth` | `stitch_set_depth()` works: the fragment's depth is written from the point (so the program loses early depth testing; give it only to stitches that need it). A depth set in the shadow pass is not supported |
 | `screen_position` | `stitch_set_screen_position()` works. Main-pass programs only: the shadow pass has no screen, so a stitch using it usually hides the vertex there (`#ifndef STITCH_HAS_SCREEN_POSITION`). What it draws is still the shader pack's to light |
 | `view_rotation` | `stitch_view_rotation()` works. Main-pass programs only |
+| `eye_position` | `stitch_eye_position()` works, in the vertex and the fragment function. Minecraft's core shaders (from their matrices); a flat projection (a screen's entity preview) has no eye, and gives the origin. A stitch tracing rays from the eye should list this in `uses` and take the origin without it |
 | `final_color` | `stitch_final` is called. In Minecraft's core shaders before the program does anything, so the colour is drawn exactly. In a shader pack's main-pass programs (Iris and OptiFine) at the end of main, over the colour the shader pack lit, its other outputs (normals, materials) as it wrote them; its later full-screen passes (tone mapping, bloom, anti-aliasing) still run over the whole frame, this too. The texel function still runs first, so a fragment the stitch drops (alpha 0) is dropped there |
 
 ## Limits

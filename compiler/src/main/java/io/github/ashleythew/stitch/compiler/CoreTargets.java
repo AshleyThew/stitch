@@ -68,6 +68,14 @@ final class CoreTargets {
     static final int REVERSED_DEPTH_FROM = 88;
     static final int TEXT_GLOBALS_FROM = 88;
     /** Where the text shaders have no screen size, the screen taken as 1080 high, as wide as the projection's shape. */
+    static final String EYE = """
+        mat4 m = ProjMat * ModelViewMat;
+            vec4 r0 = vec4(m[0][0], m[1][0], m[2][0], m[3][0]);
+            vec4 r1 = vec4(m[0][1], m[1][1], m[2][1], m[3][1]);
+            vec4 r3 = vec4(m[0][3], m[1][3], m[2][3], m[3][3]);
+            vec4 e = vec4(dot(r0.yzw, cross(r1.yzw, r3.yzw)), -dot(r0.xzw, cross(r1.xzw, r3.xzw)),
+                          dot(r0.xyw, cross(r1.xyw, r3.xyw)), -dot(r0.xyz, cross(r1.xyz, r3.xyz)));
+            return abs(e.w) > 1e-20 ? e.xyz / e.w : vec3(0.0);""";
     static final String SCREEN_GUESS = "vec2(1080.0 * ProjMat[1][1] / ProjMat[0][0], 1080.0)";
 
     private CoreTargets() {
@@ -149,6 +157,10 @@ final class CoreTargets {
             matrices = include + " <minecraft:dynamictransforms.glsl>\n" + include + " <minecraft:projection.glsl>";
         }
         shape.fragmentPosition().fragmentDepth(depth, matrices);
+        // the eye: the point every view ray passes through, the one the matrices take to x = y = w = 0 (the
+        // cross product of those rows); off the origin while the view bobs, which Minecraft does in the
+        // projection; none for a flat projection (a screen), whose rays don't meet
+        shape.eyePosition(EYE, matrices);
         String worldUp = "vec3(0.0, 1.0, 0.0)";
         if (format < MODEL_SPACE_FROM) {
             worldUp = "(transpose(" + VIEW_ROTATION + ") * vec3(0.0, 1.0, 0.0))";

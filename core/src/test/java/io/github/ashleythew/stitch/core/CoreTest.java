@@ -156,6 +156,33 @@ class CoreTest {
     }
 
     @Test
+    void eyePosition() {
+        Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
+                + " \"uses\": [\"eye_position\", \"fragment_depth\"]}",
+            Map.of("test:v", "void stitch_vertex(inout StitchVertex v) {\n#ifdef STITCH_HAS_EYE_POSITION\n"
+                + "    v.position -= stitch_eye_position();\n#endif\n}",
+                "test:f", "void stitch_fragment(inout StitchFragment f) {\n#ifdef STITCH_HAS_EYE_POSITION\n"
+                + "    stitch_set_depth(stitch_eye_position());\n#endif\n}"));
+        String matrices = "uniform mat4 ProjMat;\nuniform mat4 ModelViewMat;";
+        ProgramShape shape = new ProgramShape().input("position", "Position")
+            .fragmentDepth("return p;", matrices).eyePosition("return vec3(ProjMat[3].xyz);", matrices);
+        Weaver.Woven w = Weaver.weave(VERTEX, FRAGMENT, shape, List.of(s));
+        assertEquals(List.of("test:s"), w.applied());
+        // in both functions, the fragment shader given the matrices it reads once
+        assertTrue(w.vertex().contains("#define STITCH_HAS_EYE_POSITION"));
+        assertTrue(w.vertex().contains("vec3 stitch_eye_position() {\n    return vec3(ProjMat[3].xyz);\n}"));
+        String f = w.fragment();
+        assertTrue(f.contains("#define STITCH_HAS_EYE_POSITION"));
+        assertTrue(f.contains("vec3 stitch_eye_position() {"));
+        assertEquals(f.indexOf("uniform mat4 ProjMat;"), f.lastIndexOf("uniform mat4 ProjMat;"));
+        // a program that can't give it leaves it out, and the stitch's #ifdef with it
+        Weaver.Woven plain = Weaver.weave(VERTEX, FRAGMENT, new ProgramShape().input("position", "Position"), List.of(s));
+        assertFalse(plain.vertex().contains("vec3 stitch_eye_position() {"));
+        assertFalse(plain.fragment().contains("vec3 stitch_eye_position() {"));
+        assertFalse(plain.fragment().contains("#define STITCH_HAS_EYE_POSITION"));
+    }
+
+    @Test
     void weavesInputsAndSamples() {
         Stitch s = stitch("{\"format\": 1, \"targets\": [\"armor\"], \"vertex\": \"test:v\", \"fragment\": \"test:f\","
                 + " \"varyings\": [{\"name\": \"tint\", \"type\": \"vec4\"}], \"requires\": [\"texture_size\"]}",

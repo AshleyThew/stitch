@@ -21,7 +21,8 @@ public final class Stitch {
     public static final Set<String> TARGETS = Set.of("armor", "entity", "item_world", "item_gui", "text_world", "text_gui", "glint");
     public static final Set<String> UNIFORMS = Set.of("game_time", "screen_size");
     public static final Set<String> CAPABILITIES = Set.of("vertex_corner", "texture_size", "position_model_space", "orientation", "shadow_pass",
-        "quad_corners", "tangent", "fragment_position", "fragment_depth", "vertex_index", "screen_position", "view_rotation", "final_color");
+        "quad_corners", "tangent", "fragment_position", "fragment_depth", "vertex_index", "screen_position", "view_rotation", "final_color",
+        "eye_position");
     public static final Set<String> PASSES = Set.of("main", "shadow");
     private static final Set<String> TYPES = Set.of("float", "vec2", "vec3", "vec4", "int", "ivec2", "ivec3", "ivec4");
     private static final Pattern ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");

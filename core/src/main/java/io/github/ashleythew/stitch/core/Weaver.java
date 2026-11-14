@@ -75,6 +75,7 @@ public final class Weaver {
         boolean quad = wanted.contains("quad_corners") && shape.quadPosition != null;
         boolean screen = wanted.contains("screen_position") && shape.screen != null;
         boolean view = wanted.contains("view_rotation") && shape.viewRotation != null;
+        boolean eye = wanted.contains("eye_position") && shape.eye != null;
         boolean finalColor = wanted.contains("final_color") && shape.finalWrite != null;
         StringBuilder finals = new StringBuilder();
         boolean depth = wanted.contains("fragment_depth") && shape.depth != null;
@@ -120,13 +121,22 @@ public final class Weaver {
         if (view) {
             vertexCode.append("mat3 stitch_view_rotation() { return ").append(shape.viewRotation).append("; }\n");
         }
+        if (eye) {
+            vertexCode.append("vec3 stitch_eye_position() {\n    ").append(shape.eye.strip()).append("\n}\n");
+        }
         String fragmentTop = declarations(shape, uniforms, ft, fragment);
+        // what the depth and the eye read, each line once, where the fragment shader hasn't it already
+        java.util.Set<String> needed = new java.util.LinkedHashSet<>();
         if (depth && shape.depthDeclaration != null) {
-            for (String line : shape.depthDeclaration.strip().split("\n")) {
-                String[] words = line.replace(";", "").trim().split("\\s+");
-                if (!Glsl.declaresUniform(ft, words[words.length - 1]) && (fragment == null || !fragment.contains(line.strip()))) {
-                    fragmentTop += line.strip() + "\n";
-                }
+            needed.addAll(java.util.Arrays.asList(shape.depthDeclaration.strip().split("\n")));
+        }
+        if (eye && shape.eyeDeclaration != null) {
+            needed.addAll(java.util.Arrays.asList(shape.eyeDeclaration.strip().split("\n")));
+        }
+        for (String line : needed) {
+            String[] words = line.replace(";", "").trim().split("\\s+");
+            if (!Glsl.declaresUniform(ft, words[words.length - 1]) && (fragment == null || !fragment.contains(line.strip()))) {
+                fragmentTop += line.strip() + "\n";
             }
         }
         StringBuilder fragmentCode = new StringBuilder(STRUCTS);
@@ -141,6 +151,9 @@ public final class Weaver {
         }
         fragmentCode.append(macros(shape, uniforms));
         fragmentCode.append(helpers(shape, false, false, false));
+        if (eye) {
+            fragmentCode.append("vec3 stitch_eye_position() {\n    ").append(shape.eye.strip()).append("\n}\n");
+        }
         StringBuilder run = new StringBuilder("void stitch_run() {\n    StitchVertex v = StitchVertex(");
         for (int i = 0; i < FIELDS.length; i++) {
             String name = shape.inputs.get(FIELDS[i][0]);

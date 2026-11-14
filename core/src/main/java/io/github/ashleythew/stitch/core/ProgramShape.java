@@ -45,6 +45,9 @@ public final class ProgramShape {
     String screen = null;
     /** A GLSL expression for the rotation from the world's axes to the view's (view_rotation). */
     String viewRotation = null;
+    /** The body of stitch_eye_position() (eye_position), and what the fragment shader must declare for it. */
+    String eye = null;
+    String eyeDeclaration = null;
     /** Statements writing $C, a vec4, as the fragment's colour, as it is (final_color). */
     String finalWrite = null;
     /** Whether the final colour is written at the end of main, over what the program wrote, not at its start. */
@@ -225,6 +228,19 @@ public final class ProgramShape {
         this.finalWrite = write;
         this.finalAtEnd = atEnd;
         capabilities.add("final_color");
+        return this;
+    }
+
+    /**
+     * Where the eye is in the position space (eye_position), in both stages: the body of a function returning
+     * it, and the uniforms it reads, declared where the fragment shader doesn't already. A renderer that moves
+     * the view in its matrices (Minecraft's view bobbing, in the projection) puts the eye off the space's
+     * origin, so a ray from the eye through a point starts here.
+     */
+    public ProgramShape eyePosition(String body, String declaration) {
+        this.eye = body;
+        this.eyeDeclaration = declaration;
+        capabilities.add("eye_position");
         return this;
     }
 
