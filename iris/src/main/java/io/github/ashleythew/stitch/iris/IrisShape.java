@@ -33,6 +33,16 @@ public final class IrisShape {
      */
     private static volatile boolean viewSpace = false;
 
+    /** The draw's base vertex where the driver has draw parameters, enabled here; 0 elsewhere. */
+    static final String BASE_VERTEX = """
+        #ifdef GL_ARB_shader_draw_parameters
+        #extension GL_ARB_shader_draw_parameters : enable
+        #define STITCH_BASE_VERTEX gl_BaseVertexARB
+        #else
+        #define STITCH_BASE_VERTEX 0
+        #endif
+        """;
+
     private IrisShape() {
     }
 
@@ -58,9 +68,14 @@ public final class IrisShape {
             .findFirst().orElse("tex");
         boolean shadow = name.startsWith("shadow_");
         shape.albedo(sampler, Set.of("texture", "texture2D"))
-            // Minecraft's own buffers, drawn in GL: four vertices a quad, from the draw's start
-            .corner("(gl_VertexID % 4)")
-            .vertexIndex("gl_VertexID")
+            // Minecraft's own buffers, drawn in GL: four vertices a quad, from the draw's start. gl_VertexID
+            // counts from the buffer's start, the draw's base vertex included, and from 26.2 entities are drawn
+            // from a shared buffer at a base vertex that needn't be a multiple of 4: every corner then lands
+            // wrong, for some draws and not others (whatever else shares the buffer). The base vertex is taken
+            // off where the driver has draw parameters; elsewhere (macOS) it counts as before.
+            .vertexExtensions(BASE_VERTEX)
+            .corner("((gl_VertexID - STITCH_BASE_VERTEX) % 4)")
+            .vertexIndex("(gl_VertexID - STITCH_BASE_VERTEX)")
             // shader packs never draw into screens, so this is always the world
             .inScreen("false")
             // GLSL 330 without separate shader objects: varyings are matched by name, no layout locations
@@ -94,7 +109,7 @@ public final class IrisShape {
         java.util.regex.Matcher version = Pattern.compile("#version\\s+(\\d+)").matcher(vertex);
         if (version.find() && Integer.parseInt(version.group(1)) >= 140
             && shape.capabilities().contains("vertex_corner") && hasInput(vertex, "iris_Position") && hasInput(vertex, "iris_UV0")) {
-            shape.quadCorners("iris_Position", "iris_UV0", "gl_VertexID",
+            shape.quadCorners("iris_Position", "iris_UV0", "(gl_VertexID - STITCH_BASE_VERTEX)",
                 "#extension GL_KHR_shader_subgroup_basic : enable\n#extension GL_KHR_shader_subgroup_shuffle : enable");
         }
         // Iris's entity vertices carry the quad's tangent, bound to at_tangent where a program declares it

@@ -82,7 +82,8 @@ public final class Weaver {
         // a depth is found from the fragment's own point, so it brings the fragment's position along
         boolean fragmentPosition = (wanted.contains("fragment_position") || depth) && shape.capabilities.contains("fragment_position");
         // extensions first: nothing but directives may come before them
-        StringBuilder vertexTop = new StringBuilder(quad ? "\n" + shape.quadExtensions.strip() + "\n" : "");
+        StringBuilder vertexTop = new StringBuilder(shape.vertexExtensions.isBlank() ? "" : "\n" + shape.vertexExtensions.strip() + "\n");
+        vertexTop.append(quad ? "\n" + shape.quadExtensions.strip() + "\n" : "");
         vertexTop.append("\n").append(WOVEN_MARK).append("\n");
         vertexTop.append(STRUCTS);
         if (wanted.contains("tangent") && shape.tangentDeclaration != null) {

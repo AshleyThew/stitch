@@ -33,6 +33,8 @@ public final class ProgramShape {
     String quadUv = null;
     String quadId = null;
     String quadExtensions = "";
+    /** Directives the vertex shader needs at its top whatever the stitches use (extensions, and what they define). */
+    String vertexExtensions = "";
     /** A GLSL expression for the quad's tangent (tangent), and what declares what it reads. */
     String tangent = null;
     String tangentDeclaration = null;
@@ -148,7 +150,16 @@ public final class ProgramShape {
     }
 
     /** GLSL put before the helpers in the vertex shader: macros its expressions use. */
-    public ProgramShape preamble(String glsl) {
+    /**
+     * Directives put at the top of the vertex shader, before any declaration: extensions a reader's expressions
+     * (its corner, its vertex index) need, and the macros they define.
+     */
+    public ProgramShape vertexExtensions(String directives) {
+        this.vertexExtensions = directives;
+        return this;
+    }
+
+        public ProgramShape preamble(String glsl) {
         this.preamble = glsl;
         return this;
     }
